@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { db } from '../firebase/config';
-import { collection, onSnapshot, doc, updateDoc, query, where, getDocs } from 'firebase/firestore';
+import { db, storage } from '../firebase/config';
+import { collection, onSnapshot, doc, setDoc, updateDoc, query, where, getDocs } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import Link from 'next/link';
 
@@ -18,7 +19,18 @@ export default function AdminDashboard() {
   // COPIED ALERT TIMER HOOK
   const [copiedVesselId, setCopiedVesselId] = useState('');
 
-  // CONTROL MODAL INTERFACE STATES
+  // --- NEW VESSEL LAUNCH MODAL STATES ---
+  const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false);
+  const [launchVoyagerId, setLaunchVoyagerId] = useState('');
+  const [launchOriginCity, setLaunchOriginCity] = useState('');
+  const [launchDestinationCity, setLaunchDestinationCity] = useState('');
+  const [launchLatitude, setLaunchLatitude] = useState('');
+  const [launchLongitude, setLaunchLongitude] = useState('');
+  const [launchImageFile, setLaunchImageFile] = useState<File | null>(null);
+  const [launchingAction, setLaunchingAction] = useState(false);
+  const [launchError, setLaunchError] = useState('');
+
+  // TELEMETRY CORRECTION MODAL STATES
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedLogId, setSelectedLogId] = useState('');
   const [editVoyagerId, setEditVoyagerId] = useState('');
@@ -92,7 +104,7 @@ export default function AdminDashboard() {
   // ON-THE-FLY RANDOM CHARACTER LINK GENERATOR (12-15 CHARACTERS LONG)
   const generateRandomUrlString = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-    const length = Math.floor(Math.random() * 4) + 12; // Generates a random length between 12 and 15
+    const length = Math.floor(Math.random() * 4) + 12;
     let randomString = '';
     for (let i = 0; i < length; i++) {
       randomString += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -104,14 +116,58 @@ export default function AdminDashboard() {
     const vesselIdLower = vessel.id.toLowerCase();
     const cleanOrigin = window.location.origin;
     const randomSuffix = generateRandomUrlString();
-    
-    // Formats path to: https://tvmc.net/mission/tv-20/checkin/aB3K9xZp2LmQ
     const directCheckinUrl = `${cleanOrigin}/mission/${vesselIdLower}/checkin/${randomSuffix}`;
     
     navigator.clipboard.writeText(directCheckinUrl).then(() => {
       setCopiedVesselId(vessel.id);
       setTimeout(() => setCopiedVesselId(''), 2000);
     }).catch(err => console.error("Clipboard routing fault:", err));
+  };
+
+  // --- SUBMIT CORE NEW VESSEL LAUNCH LOGIC ---
+  const handleLaunchNewVessel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetVesselId = launchVoyagerId.trim().toUpperCase();
+    
+    if (!targetVesselId || !launchOriginCity.trim() || !launchDestinationCity.trim() || !launchLatitude.trim() || !launchLongitude.trim()) return;
+
+    setLaunchingAction(true);
+    setLaunchError('');
+    let uploadedImageUrl = '';
+
+    try {
+      // Handle asset image upload if provided
+      if (launchImageFile) {
+        const storageRef = ref(storage, `launches/${targetVesselId}_${Date.now()}_${launchImageFile.name}`);
+        const uploadSnapshot = await uploadBytes(storageRef, launchImageFile);
+        uploadedImageUrl = await getDownloadURL(uploadSnapshot.ref);
+      }
+
+      // Save complete entry baseline deck to Firestore voyagerMissions
+      await setDoc(doc(db, 'voyagerMissions', targetVesselId), {
+        missionId: targetVesselId,
+        originCity: launchOriginCity.trim(),
+        destinationCity: launchDestinationCity.trim(),
+        latitude: launchLatitude.trim(),
+        longitude: launchLongitude.trim(),
+        launchImageUrl: uploadedImageUrl,
+        launchDate: new Date().toISOString()
+      });
+
+      // Reset fields and collapse modal frame
+      setLaunchVoyagerId('');
+      setLaunchOriginCity('');
+      setLaunchDestinationCity('');
+      setLaunchLatitude('');
+      setLaunchLongitude('');
+      setLaunchImageFile(null);
+      setIsLaunchModalOpen(false);
+    } catch (err: any) {
+      console.error("Vessel provisioning deployment error:", err);
+      setLaunchError('Mainframe validation error while committing vessel profile.');
+    } finally {
+      setLaunchingAction(false);
+    }
   };
 
   const openCorrectionModal = (log: any) => {
@@ -167,9 +223,18 @@ export default function AdminDashboard() {
           <h1 className="text-xl font-black tracking-widest uppercase text-slate-100">COMMAND CONTROL CENTER</h1>
           <p className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-widest mt-0.5">Secure Mainframe Override Panel</p>
         </div>
-        <Link href="/" className="text-xs font-mono font-bold bg-slate-900 border border-slate-800 hover:bg-slate-800 px-4 py-2 rounded-xl transition-all uppercase tracking-wider text-slate-200">
-          ← Main Console
-        </Link>
+        <div className="flex items-center space-x-3">
+          {/* INTERACTIVE LAUNCH INITIATION ACTION TRIGGER */}
+          <button
+            onClick={() => { setLaunchError(''); setIsLaunchModalOpen(true); }}
+            className="text-xs font-mono font-black bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-xl transition-all uppercase tracking-wider text-white shadow-lg"
+          >
+            🚀 Launch New TV
+          </button>
+          <Link href="/" className="text-xs font-mono font-bold bg-slate-900 border border-slate-800 hover:bg-slate-800 px-4 py-2 rounded-xl transition-all uppercase tracking-wider text-slate-200">
+            ← Main Console
+          </Link>
+        </div>
       </header>
 
       {/* ADMIN CONTROL RUNTIME INTERFACE */}
@@ -255,11 +320,67 @@ export default function AdminDashboard() {
         </div>
       </main>
 
-      {/* TELEMETRY CALIBRATION CONTROL MODAL */}
+      {/* --- MODAL DIALOG 1: VESSEL PROVISIONING LAUNCH TERMINAL --- */}
+      {isLaunchModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-2xl relative font-mono text-xs text-slate-100">
+            <header className="text-center space-y-1">
+              <h3 className="text-sm font-black tracking-widest uppercase text-white">PROVISION & LAUNCH CONTAINER</h3>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider">Initialize Fleet Module Baseline Coordinates</p>
+            </header>
+
+            <form onSubmit={handleLaunchNewVessel} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-300 uppercase">VESSEL ID IDENTIFIER (E.G. TV-20)</label>
+                <input type="text" required placeholder="TV-XX" value={launchVoyagerId} onChange={(e) => setLaunchVoyagerId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold uppercase" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">ORIGIN (LOCATION)</label>
+                  <input type="text" required placeholder="e.g. DAPHNE, AL" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">DESTINATION TARGET</label>
+                  <input type="text" required placeholder="e.g. BOSTON, MA" value={launchDestinationCity} onChange={(e) => setLaunchDestinationCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LATITUDE (X)</label>
+                  <input type="text" required placeholder="e.g. 30.6035" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LONGITUDE (Y)</label>
+                  <input type="text" required placeholder="e.g. -87.9011" value={launchLongitude} onChange={(e) => setLaunchLongitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-300 uppercase">ATTACH LAUNCH PROFILE IMAGE</label>
+                <input type="file" accept="image/*" onChange={(e) => setLaunchImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
+              </div>
+
+              {launchError && <p className="text-rose-400 text-[10px] text-center uppercase bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {launchError}</p>}
+
+              <div className="pt-2 flex flex-col space-y-2">
+                <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-widest py-3 px-4 rounded-xl transition-all disabled:opacity-50">
+                  {launchingAction ? 'COMMITTING PROFILE TO CLOUD...' : 'INITIALIZE DEPLOYMENT PATH'}
+                </button>
+                <button type="button" onClick={() => setIsLaunchModalOpen(false)} className="w-full bg-transparent text-slate-400 hover:text-slate-200 uppercase tracking-wider py-1 font-bold text-[10px]">
+                  [Abort Provisioning Request]
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DIALOG 2: TELEMETRY CALIBRATION CONTROL MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-2xl relative font-mono text-xs text-slate-100">
-            
             <header className="text-center space-y-1">
               <h3 className="text-sm font-black tracking-widest uppercase text-white">TELEMETRY VECTOR OVERRIDE</h3>
               <p className="text-[9px] text-slate-400 uppercase tracking-wider">Modifying Transmission Log Signature Reference</p>
@@ -315,7 +436,6 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
-
           </div>
         </div>
       )}
