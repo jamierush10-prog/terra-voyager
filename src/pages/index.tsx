@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { db } from '../firebase/config';
-import { collection, onSnapshot, doc, setDoc, query, where, getDocs, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -14,6 +14,7 @@ const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { 
 export default function Home() {
   const router = useRouter();
   const [activeVessels, setActiveVessels] = useState<Record<string, any>>({});
+  const [telemetryLogs, setTelemetryLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // AUTH STATES
@@ -30,17 +31,15 @@ export default function Home() {
   const [authActionLoading, setAuthActionLoading] = useState(false);
   const [authActionError, setAuthActionError] = useState('');
 
-  // 1. LISTEN TO ACTIVE VESSEL DEPLOYMENTS WITH MULTI-KEY FALLBACKS
+  // 1. LISTEN TO REGISTRY MISSIONS
   useEffect(() => {
     const mCollection = collection(db, 'voyagerMissions');
     const unsubscribeVessels = onSnapshot(mCollection, (snapshot) => {
       const vesselMap: Record<string, any> = {};
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // Check document ID string first, then inner missionId property
         const docIdUpper = doc.id.toUpperCase();
         const propertyIdUpper = data.missionId ? data.missionId.toUpperCase() : '';
-        
         const masterId = docIdUpper.startsWith('TV-') ? docIdUpper : propertyIdUpper;
         
         if (masterId) {
@@ -48,16 +47,33 @@ export default function Home() {
         }
       });
       setActiveVessels(vesselMap);
-      setLoading(false);
     }, (err) => {
-      console.error("Firestore fleet link fault:", err);
-      setLoading(false);
+      console.error("Missions sync fault:", err);
     });
 
     return () => unsubscribeVessels();
   }, []);
 
-  // 2. USER AUTHENTICATION MONITOR
+  // 2. LISTEN TO ALL FIELD CHECK-INS TO CALCULATE LAST KNOWN LOCATIONS
+  useEffect(() => {
+    const logsCollection = collection(db, 'telemetryLogs');
+    const unsubscribeLogs = onSnapshot(logsCollection, (snapshot) => {
+      const logsList: any[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        logsList.push({ id: doc.id, ...data });
+      });
+      setTelemetryLogs(logsList);
+      setLoading(false);
+    }, (err) => {
+      console.error("Telemetry sync fault:", err);
+      setLoading(false);
+    });
+
+    return () => unsubscribeLogs();
+  }, []);
+
+  // 3. USER AUTHENTICATION MONITOR
   useEffect(() => {
     const auth = getAuth();
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -119,18 +135,49 @@ export default function Home() {
       setAuthPassword('');
       setAuthUsername('');
     } catch (err: any) {
-      console.error("Authentication error:", err);
       setAuthActionError('Clearance criteria rejected.');
     } finally {
       setAuthActionLoading(false);
     }
   };
 
-  const activeMapMarkers = Object.values(activeVessels).filter(v => {
-    const lat = parseFloat(v.latitude);
-    const lng = parseFloat(v.longitude);
-    return !isNaN(lat) && !isNaN(lng);
-  });
+  // INTERSECT REGISTRIES WITH FIELD TELEMETRY TO BUILD COMPREHENSIVE LAST-KNOWN MAP MARKERS
+  const mappedFleetPins = Object.keys(activeVessels).map((vesselId) => {
+    const baselineRegistryData = activeVessels[vesselId];
+    
+    // Filter out all logs for this specific vessel and sort by timestamp to find the latest check-in
+    const vesselLogs = telemetryLogs
+      .filter(log => log.voyagerId && log.voyagerId.toUpperCase() === vesselId)
+      .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+
+    // Default to origin coordinates from the mission registry document
+    let currentLat = parseFloat(baselineRegistryData.latitude);
+    let currentLng = parseFloat(baselineRegistryData.longitude);
+    let locationLabel = `DEPLOYMENT VECTOR: ${baselineRegistryData.originCity || 'ORIGIN'}`;
+    let operatorSignoff = 'SYSTEM CONSOLE';
+
+    // If field logs exist, overwrite coordinates with the latest check-in location
+    if (vesselLogs.length > 0) {
+      const latestLog = vesselLogs[0];
+      const parsedLogLat = parseFloat(latestLog.latitude);
+      const parsedLogLng = parseFloat(latestLog.longitude);
+      
+      if (!isNaN(parsedLogLat) && !isNaN(parsedLogLng)) {
+        currentLat = parsedLogLat;
+        currentLng = parsedLogLng;
+        locationLabel = latestLog.reportedLocation || 'VERIFIED FIELD POINT';
+        operatorSignoff = latestLog.handlerName || 'FIELD HANDLER';
+      }
+    }
+
+    return {
+      vesselId,
+      lat: currentLat,
+      lng: currentLng,
+      locationLabel,
+      operatorSignoff
+    };
+  }).filter(pin => !isNaN(pin.lat) && !isNaN(pin.lng));
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
@@ -167,13 +214,14 @@ export default function Home() {
         <section className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative shrink-0">
           <MapContainer center={[37.0902, -95.7129]} zoom={4} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-            {activeMapMarkers.map((vessel) => (
-              <Marker key={vessel.id} position={[parseFloat(vessel.latitude), parseFloat(vessel.longitude)]}>
+            {mappedFleetPins.map((pin) => (
+              <Marker key={pin.vesselId} position={[pin.lat, pin.lng]}>
                 <Popup>
                   <div className="text-slate-900 font-mono text-xs font-bold p-1">
-                    <span className="text-blue-600 font-black block text-sm">{vessel.missionId || vessel.id}</span>
-                    <span className="block mt-1">Location Matrix Updated</span>
-                    <Link href={`/mission/${(vessel.missionId || vessel.id).toLowerCase()}`} className="text-blue-500 underline block mt-2 text-[11px] uppercase font-black">Open Vessel Deck →</Link>
+                    <span className="text-blue-600 font-black block text-sm">{pin.vesselId}</span>
+                    <span className="block mt-1 text-slate-700">Last Status: {pin.locationLabel}</span>
+                    <span className="block text-[10px] text-slate-500">Sign-off: {pin.operatorSignoff}</span>
+                    <Link href={`/mission/${pin.vesselId.toLowerCase()}`} className="text-blue-500 underline block mt-2 text-[11px] uppercase font-black">Open Vessel Deck →</Link>
                   </div>
                 </Popup>
               </Marker>
@@ -199,7 +247,6 @@ export default function Home() {
                 {fleetRegistryIds.map((id) => {
                   const isDeployed = !!activeVessels[id];
                   return isDeployed ? (
-                    // HIGH CONTRAST ACTIVE VESSEL NODE CARD
                     <Link 
                       key={id}
                       href={`/mission/${id.toLowerCase()}`}
@@ -209,7 +256,6 @@ export default function Home() {
                       <span className="w-2 h-2 rounded-full bg-cyan-400 block animate-pulse"></span>
                     </Link>
                   ) : (
-                    // MUTED UNLAUNCHED CARD
                     <div 
                       key={id}
                       className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 text-center flex flex-col items-center justify-center space-y-1 opacity-[0.15] select-none"
