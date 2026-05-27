@@ -12,7 +12,7 @@ const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), 
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
 const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false });
 
-function MapRecenter({ center }) {
+function MapRecenter({ center }: { center: [number, number] }) {
   const { useMap } = require('react-leaflet');
   const map = useMap();
   useEffect(() => {
@@ -29,24 +29,24 @@ export default function MissionControl() {
   const voyagerId = id ? id.toString().toUpperCase() : '';
   
   const [activeTab, setActiveTab] = useState('ledger'); 
-  const [missionMeta, setMissionMeta] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [missionMeta, setMissionMeta] = useState<any>(null);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const [currentUser, setCurrentUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
+  // FIXED AUTH AND PROFILE TYPES FOR TYPESCRIPT BYPASS
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   const [timeSinceLaunch, setTimeSinceLaunch] = useState('00:000:00:00:00');
   const [timeSinceCheckin, setTimeSinceCheckin] = useState('000:00:00:00');
   const [milesFromLaunch, setMilesFromLaunch] = useState(0);
   const [totalMilesTraveled, setTotalMilesTraveled] = useState(0);
 
-  const defaultCenter = [30.6035, -87.9011]; 
+  const defaultCenter: [number, number] = [30.6035, -87.9011]; 
 
-  // UNIFIED TIMESTAMP FORMATTING UTILITY
-  const formatDisplayDateTime = (timestampValue) => {
+  const formatDisplayDateTime = (timestampValue: any) => {
     if (!timestampValue) return 'Processing...';
     let targetDate;
     if (typeof timestampValue.toDate === 'function') {
@@ -65,7 +65,7 @@ export default function MissionControl() {
     });
   };
 
-  const calculateHaversineDistanceInMiles = (lat1, lon1, lat2, lon2) => {
+  const calculateHaversineDistanceInMiles = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2 || isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
     const R = 3958.8; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -74,7 +74,7 @@ export default function MissionControl() {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  const formatOperationalDuration = (msDuration, includeYear = false) => {
+  const formatOperationalDuration = (msDuration: number, includeYear = false) => {
     if (msDuration <= 0 || isNaN(msDuration)) return includeYear ? '00:000:00:00:00' : '000:00:00:00';
     const totalSeconds = Math.floor(msDuration / 1000);
     const totalMinutes = Math.floor(totalSeconds / 60);
@@ -111,7 +111,7 @@ export default function MissionControl() {
 
     const logsCollection = collection(db, 'telemetryLogs');
     const unsubscribeLogs = onSnapshot(logsCollection, (snapshot) => {
-      const fetchedLogs = [];
+      const fetchedLogs: any[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
         if (data.voyagerId && data.voyagerId.toUpperCase() === voyagerId) fetchedLogs.push({ id: doc.id, ...data });
@@ -124,7 +124,7 @@ export default function MissionControl() {
     const commsCollection = collection(db, 'crewComms');
     const qChat = query(commsCollection, where('voyagerId', '==', voyagerId));
     const unsubscribeChat = onSnapshot(qChat, (snapshot) => {
-      const messages = [];
+      const messages: any[] = [];
       snapshot.forEach((doc) => {
         messages.push({ id: doc.id, ...doc.data() });
       });
@@ -135,7 +135,7 @@ export default function MissionControl() {
     return () => { unsubscribeAuth(); unsubscribeMission(); unsubscribeLogs(); unsubscribeChat(); };
   }, [voyagerId]);
 
-  const unifiedWaypointTimeline = [];
+  const unifiedWaypointTimeline: any[] = [];
   if (missionMeta && missionMeta.latitude && missionMeta.longitude) {
     unifiedWaypointTimeline.push({
       id: 'LAUNCH_BASE',
@@ -188,7 +188,7 @@ export default function MissionControl() {
     return () => clearInterval(timerInterval);
   }, [missionMeta, logs, unifiedWaypointTimeline.length]);
 
-  const handleSendCommsMessage = async (e) => {
+  const handleSendCommsMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !userProfile || !hasVerifiedCheckinAccess) return;
     try {
@@ -203,8 +203,8 @@ export default function MissionControl() {
     } catch (error) { console.error("Comms send fault:", error); }
   };
 
-  const mapRoutingPolylinePoints = unifiedWaypointTimeline
-    .map(l => [parseFloat(l.latitude), parseFloat(l.longitude)])
+  const mapRoutingPolylinePoints: [number, number][] = unifiedWaypointTimeline
+    .map(l => [parseFloat(l.latitude), parseFloat(l.longitude)] as [number, number])
     .filter(p => !isNaN(p[0]) && !isNaN(p[1]));
 
   const currentMapCenter = mapRoutingPolylinePoints.length > 0 ? mapRoutingPolylinePoints[mapRoutingPolylinePoints.length - 1] : defaultCenter;
@@ -319,8 +319,6 @@ export default function MissionControl() {
               <div className="flex-1 flex flex-col overflow-hidden">
                 {currentUser && userProfile ? (
                   <div className="flex-1 flex flex-col overflow-hidden space-y-4">
-                    
-                    {/* CREW COMMS CONTAINER UPDATED WITH DYNAMIC TIMESTAMPS */}
                     <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 font-mono text-xs">
                       {chatMessages.length === 0 ? (
                         <div className="text-center py-12 text-slate-600 uppercase text-[10px]">Secure Channel Established. Begin Comms Broadcast...</div>
