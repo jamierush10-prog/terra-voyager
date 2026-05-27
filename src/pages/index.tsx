@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { db } from '../firebase/config';
-import { collection, onSnapshot, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
-// DYNAMICALLY LOAD LEAFLET TO BYPASS NEXT.JS SSR COMPILER CHECKS
 const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
@@ -31,15 +30,21 @@ export default function Home() {
   const [authActionLoading, setAuthActionLoading] = useState(false);
   const [authActionError, setAuthActionError] = useState('');
 
-  // 1. LISTEN TO ACTIVE VESSEL DEPLOYMENTS IN FIRESTORE
+  // 1. LISTEN TO ACTIVE VESSEL DEPLOYMENTS WITH MULTI-KEY FALLBACKS
   useEffect(() => {
     const mCollection = collection(db, 'voyagerMissions');
     const unsubscribeVessels = onSnapshot(mCollection, (snapshot) => {
       const vesselMap: Record<string, any> = {};
       snapshot.forEach((doc) => {
         const data = doc.data();
-        if (data.missionId) {
-          vesselMap[data.missionId.toUpperCase()] = { id: doc.id, ...data };
+        // Check document ID string first, then inner missionId property
+        const docIdUpper = doc.id.toUpperCase();
+        const propertyIdUpper = data.missionId ? data.missionId.toUpperCase() : '';
+        
+        const masterId = docIdUpper.startsWith('TV-') ? docIdUpper : propertyIdUpper;
+        
+        if (masterId) {
+          vesselMap[masterId] = { id: doc.id, ...data };
         }
       });
       setActiveVessels(vesselMap);
@@ -52,7 +57,7 @@ export default function Home() {
     return () => unsubscribeVessels();
   }, []);
 
-  // 2. MONITOR BIOMETRIC USER SIGNALS
+  // 2. USER AUTHENTICATION MONITOR
   useEffect(() => {
     const auth = getAuth();
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -79,7 +84,7 @@ export default function Home() {
     return () => unsubscribeAuth();
   }, []);
 
-  // GENERATE CORE ARRAY FROM TV-01 TO TV-100
+  // GENERATE ARRAY FROM TV-01 TO TV-100
   const fleetRegistryIds = Array.from({ length: 100 }, (_, i) => {
     const num = String(i + 1).padStart(2, '0');
     return `TV-${num}`;
@@ -115,13 +120,12 @@ export default function Home() {
       setAuthUsername('');
     } catch (err: any) {
       console.error("Authentication error:", err);
-      setAuthActionError(err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' ? 'Invalid clearance parameters.' : 'Clearance rejected.');
+      setAuthActionError('Clearance criteria rejected.');
     } finally {
       setAuthActionLoading(false);
     }
   };
 
-  // EXTRACT VALID COORDINATES FOR ACTIVE FLEET PIN DROPS
   const activeMapMarkers = Object.values(activeVessels).filter(v => {
     const lat = parseFloat(v.latitude);
     const lng = parseFloat(v.longitude);
@@ -129,7 +133,7 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col h-screen overflow-hidden relative">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
       {/* HEADER CONTROL BLOCK */}
@@ -139,7 +143,6 @@ export default function Home() {
           <p className="text-[10px] font-mono text-slate-300 uppercase tracking-widest font-bold mt-0.5">Central Fleet Command & Telemetry Engine</p>
         </div>
         
-        {/* RIGHT DECK AUTH HOOKS */}
         <div className="font-mono text-[11px] uppercase tracking-wider">
           {authLoading ? (
             <span className="text-slate-400 animate-pulse">CONNECTING INTERFACE...</span>
@@ -158,20 +161,19 @@ export default function Home() {
       </header>
 
       {/* MAIN TWO-COLUMN SPLIT CONTROL DECK */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden relative z-10">
+      <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative z-10">
         
-        {/* COLUMN 1: GLOBAL MAP MATRIX */}
-        <section className="w-full md:w-1/2 h-64 md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative">
+        {/* COLUMN 1: PERFECTLY SQUARE MAP CONTAINER FOR MOBILE */}
+        <section className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative shrink-0">
           <MapContainer center={[37.0902, -95.7129]} zoom={4} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
             {activeMapMarkers.map((vessel) => (
               <Marker key={vessel.id} position={[parseFloat(vessel.latitude), parseFloat(vessel.longitude)]}>
                 <Popup>
                   <div className="text-slate-900 font-mono text-xs font-bold p-1">
-                    <span className="text-blue-600 font-black block text-sm">{vessel.missionId}</span>
-                    <span className="block mt-1">Origin: {vessel.originCity}</span>
-                    <span className="block">Destination: {vessel.destinationCity}</span>
-                    <Link href={`/mission/${vessel.missionId.toLowerCase()}`} className="text-blue-500 underline block mt-2 text-[11px] uppercase font-black">Open Vessel Deck →</Link>
+                    <span className="text-blue-600 font-black block text-sm">{vessel.missionId || vessel.id}</span>
+                    <span className="block mt-1">Location Matrix Updated</span>
+                    <Link href={`/mission/${(vessel.missionId || vessel.id).toLowerCase()}`} className="text-blue-500 underline block mt-2 text-[11px] uppercase font-black">Open Vessel Deck →</Link>
                   </div>
                 </Popup>
               </Marker>
@@ -179,18 +181,17 @@ export default function Home() {
           </MapContainer>
         </section>
 
-        {/* COLUMN 2: REGISTRY MATRIX GRID (TV-01 TO TV-100) */}
+        {/* COLUMN 2: REGISTRY MATRIX GRID */}
         <section className="w-full md:w-1/2 flex flex-col h-auto md:h-full overflow-hidden bg-slate-900/10">
           <div className="p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur shrink-0 flex justify-between items-center">
             <h2 className="text-xs font-mono font-black text-slate-100 uppercase tracking-widest">FLEET REGISTRY MATRIX VECTOR</h2>
             <div className="flex items-center space-x-3 font-mono text-[9px] font-bold uppercase text-slate-300">
-              <div className="flex items-center space-x-1"><span className="w-2 h-2 rounded-full bg-blue-500 block"></span><span>Active</span></div>
-              <div className="flex items-center space-x-1"><span className="w-2 h-2 rounded-full bg-slate-800 border border-slate-700 block"></span><span>Staged</span></div>
+              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 block"></span><span>Active</span></div>
+              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-700 block"></span><span>Staged</span></div>
             </div>
           </div>
 
-          {/* TELEMETRY MATRIX BLOCK */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 bg-slate-950/40">
             {loading ? (
               <div className="text-center py-12 font-mono text-xs text-slate-400 animate-pulse">QUERYING FLEET CHANNELS...</div>
             ) : (
@@ -198,23 +199,23 @@ export default function Home() {
                 {fleetRegistryIds.map((id) => {
                   const isDeployed = !!activeVessels[id];
                   return isDeployed ? (
-                    // ACTIVE DEPLOYED VESSEL NODE CARD
+                    // HIGH CONTRAST ACTIVE VESSEL NODE CARD
                     <Link 
                       key={id}
                       href={`/mission/${id.toLowerCase()}`}
-                      className="bg-blue-950/40 border border-blue-800/80 hover:bg-blue-900/60 hover:border-blue-500 rounded-xl p-3 text-center transition-all shadow-lg shadow-blue-950/20 flex flex-col items-center justify-center space-y-1.5 group cursor-pointer"
+                      className="bg-blue-950/80 border-2 border-blue-500 hover:bg-blue-900 rounded-xl p-3 text-center transition-all shadow-md shadow-blue-500/10 flex flex-col items-center justify-center space-y-1 cursor-pointer"
                     >
-                      <span className="text-[12px] font-mono font-black text-white tracking-wider group-hover:scale-105 transition-transform">{id}</span>
-                      <span className="w-2 h-2 rounded-full bg-blue-400 block animate-pulse"></span>
+                      <span className="text-[13px] font-mono font-black text-white tracking-wider">{id}</span>
+                      <span className="w-2 h-2 rounded-full bg-cyan-400 block animate-pulse"></span>
                     </Link>
                   ) : (
                     // MUTED UNLAUNCHED CARD
                     <div 
                       key={id}
-                      className="bg-slate-950/30 border border-slate-900/80 rounded-xl p-3 text-center flex flex-col items-center justify-center space-y-1.5 opacity-30 select-none"
+                      className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 text-center flex flex-col items-center justify-center space-y-1 opacity-[0.15] select-none"
                     >
-                      <span className="text-[12px] font-mono font-bold text-slate-400 tracking-wider">{id}</span>
-                      <span className="w-2 h-2 rounded-full bg-slate-800 border border-slate-700 block"></span>
+                      <span className="text-[12px] font-mono font-bold text-slate-500 tracking-wider">{id}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-800 block"></span>
                     </div>
                   );
                 })}
