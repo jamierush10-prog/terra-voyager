@@ -54,7 +54,7 @@ export default function Home() {
     return () => unsubscribeVessels();
   }, []);
 
-  // 2. LISTEN TO ALL FIELD CHECK-INS TO CALCULATE LAST KNOWN LOCATIONS
+  // 2. LISTEN TO ALL FIELD CHECK-INS
   useEffect(() => {
     const logsCollection = collection(db, 'telemetryLogs');
     const unsubscribeLogs = onSnapshot(logsCollection, (snapshot) => {
@@ -145,18 +145,15 @@ export default function Home() {
   const mappedFleetPins = Object.keys(activeVessels).map((vesselId) => {
     const baselineRegistryData = activeVessels[vesselId];
     
-    // Filter out all logs for this specific vessel and sort by timestamp to find the latest check-in
     const vesselLogs = telemetryLogs
       .filter(log => log.voyagerId && log.voyagerId.toUpperCase() === vesselId)
       .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
-    // Default to origin coordinates from the mission registry document
     let currentLat = parseFloat(baselineRegistryData.latitude);
     let currentLng = parseFloat(baselineRegistryData.longitude);
     let locationLabel = `DEPLOYMENT VECTOR: ${baselineRegistryData.originCity || 'ORIGIN'}`;
     let operatorSignoff = 'SYSTEM CONSOLE';
 
-    // If field logs exist, overwrite coordinates with the latest check-in location
     if (vesselLogs.length > 0) {
       const latestLog = vesselLogs[0];
       const parsedLogLat = parseFloat(latestLog.latitude);
@@ -210,7 +207,7 @@ export default function Home() {
       {/* MAIN TWO-COLUMN SPLIT CONTROL DECK */}
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative z-10">
         
-        {/* COLUMN 1: PERFECTLY SQUARE MAP CONTAINER FOR MOBILE */}
+        {/* COLUMN 1: MAP CONTAINER */}
         <section className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative shrink-0">
           <MapContainer center={[37.0902, -95.7129]} zoom={4} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
@@ -235,6 +232,7 @@ export default function Home() {
             <h2 className="text-xs font-mono font-black text-slate-100 uppercase tracking-widest">FLEET REGISTRY MATRIX VECTOR</h2>
             <div className="flex items-center space-x-3 font-mono text-[9px] font-bold uppercase text-slate-300">
               <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 block"></span><span>Active</span></div>
+              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 block"></span><span>Missing</span></div>
               <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-700 block"></span><span>Staged</span></div>
             </div>
           </div>
@@ -245,17 +243,44 @@ export default function Home() {
             ) : (
               <div className="grid grid-cols-4 sm:grid-cols-5 gap-2.5">
                 {fleetRegistryIds.map((id) => {
-                  const isDeployed = !!activeVessels[id];
+                  const baselineRegistryData = activeVessels[id];
+                  const isDeployed = !!baselineRegistryData;
+
+                  // DETERMINE INDIVIDUAL VESSEL LOOP STATUS WITHIN ARRAY
+                  const isItemMissing = (() => {
+                    if (!isDeployed) return false;
+                    const currentTimeMs = new Date().getTime();
+                    
+                    const vesselLogs = telemetryLogs
+                      .filter(log => log.voyagerId && log.voyagerId.toUpperCase() === id)
+                      .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+
+                    if (vesselLogs.length > 0) {
+                      const latestLog = vesselLogs[0];
+                      const lastCheckinMs = latestLog.timestamp?.toDate() ? latestLog.timestamp.toDate().getTime() : currentTimeMs;
+                      return (currentTimeMs - lastCheckinMs) > (30 * 24 * 60 * 60 * 1000);
+                    } else if (baselineRegistryData?.launchDate) {
+                      return (currentTimeMs - new Date(baselineRegistryData.launchDate).getTime()) > (30 * 24 * 60 * 60 * 1000);
+                    }
+                    return false;
+                  })();
+
                   return isDeployed ? (
+                    // ACTIVE VESSEL MODULE CARD
                     <Link 
                       key={id}
                       href={`/mission/${id.toLowerCase()}`}
-                      className="bg-blue-950/80 border-2 border-blue-500 hover:bg-blue-900 rounded-xl p-3 text-center transition-all shadow-md shadow-blue-500/10 flex flex-col items-center justify-center space-y-1 cursor-pointer"
+                      className={`border-2 rounded-xl p-3 text-center transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer ${
+                        isItemMissing 
+                          ? 'bg-yellow-950/40 border-yellow-500 hover:bg-yellow-950/70 shadow-md shadow-yellow-500/5' 
+                          : 'bg-blue-950/80 border-blue-500 hover:bg-blue-900 shadow-md shadow-blue-500/10'
+                      }`}
                     >
                       <span className="text-[13px] font-mono font-black text-white tracking-wider">{id}</span>
-                      <span className="w-2 h-2 rounded-full bg-cyan-400 block animate-pulse"></span>
+                      <span className={`w-2 h-2 rounded-full block animate-pulse ${isItemMissing ? 'bg-yellow-400' : 'bg-cyan-400'}`}></span>
                     </Link>
                   ) : (
+                    // MUTED UNLAUNCHED STAGED MODULE CARD
                     <div 
                       key={id}
                       className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 text-center flex flex-col items-center justify-center space-y-1 opacity-[0.15] select-none"

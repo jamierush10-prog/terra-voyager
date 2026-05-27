@@ -86,6 +86,19 @@ export default function VesselControl() {
     return includeYear ? `${String(Math.floor(totalDays / 365)).padStart(2, '0')}:${String(totalDays % 365).padStart(3, '0')}:${hh}:${mm}:${ss}` : `${String(totalDays).padStart(3, '0')}:${hh}:${mm}:${ss}`;
   };
 
+  // AUTOMATED 30-DAY CRITICAL TIMEOUT CALCULATION ENGINE
+  const isVesselMissing = (() => {
+    const currentTimeMs = new Date().getTime();
+    if (logs.length > 0) {
+      const latestLog = logs[logs.length - 1];
+      const lastCheckinMs = latestLog.timestamp?.toDate() ? latestLog.timestamp.toDate().getTime() : currentTimeMs;
+      return (currentTimeMs - lastCheckinMs) > (30 * 24 * 60 * 60 * 1000);
+    } else if (vesselMeta?.launchDate) {
+      return (currentTimeMs - new Date(vesselMeta.launchDate).getTime()) > (30 * 24 * 60 * 60 * 1000);
+    }
+    return false;
+  })();
+
   useEffect(() => {
     if (!voyagerId) return;
 
@@ -228,16 +241,23 @@ export default function VesselControl() {
               </Link>
             )}
             <div className="flex justify-between items-center w-full">
-              {/* STACKED VESSEL TYPOGRAPHY SECTION WITH NO // */}
               <div className="flex flex-col">
                 <span className="text-xs font-mono font-bold tracking-widest text-slate-400 uppercase">VESSEL</span>
                 <h1 className="text-3xl font-black tracking-wider text-slate-100 uppercase leading-none mt-1">{voyagerId}</h1>
               </div>
               <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-widest uppercase rounded bg-blue-950/60 text-blue-400 border border-blue-900/40">
-                  IN TRANSIT
-                </span>
-                {/* MOBILE COLLAPSE MAP BUTTON */}
+                
+                {/* CONDITIONAL SYSTEM BADGE MATRIX */}
+                {isVesselMissing ? (
+                  <span className="px-2 py-0.5 text-[10px] font-mono font-black tracking-widest uppercase rounded bg-yellow-950/80 text-yellow-400 border border-yellow-600/50 animate-pulse">
+                    MISSING
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-widest uppercase rounded bg-blue-950/60 text-blue-400 border border-blue-900/40">
+                    IN TRANSIT
+                  </span>
+                )}
+
                 <button 
                   onClick={() => setIsMapCollapsed(!isMapCollapsed)} 
                   className="md:hidden bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-800 font-mono text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all"
@@ -259,7 +279,6 @@ export default function VesselControl() {
       </header>
 
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden max-w-7xl w-full mx-auto relative z-10">
-        {/* COLLAPSIBLE MAP CONTAINER BOX */}
         <section className={`w-full md:w-1/2 border-slate-900 relative shrink-0 transition-all duration-300 ease-in-out ${isMapCollapsed ? 'h-0 border-b-0 hidden' : 'h-64 md:h-full border-b md:border-b-0 md:border-r'}`}>
           {isCenterValid ? (
             <MapContainer center={currentMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
@@ -365,8 +384,10 @@ export default function VesselControl() {
                   </div>
                 ) : (
                   <div className="text-center py-12 font-mono text-xs text-slate-200 font-bold">
-                    COMMS CHANNEL RECEPTION ONLY // SECURE OVERRIDE STAGED
-                    <p className="text-[11px] text-slate-400 mt-2 lowercase font-normal">enlist via field portal to authorize communication transmission keys.</p>
+                    COMMS CHANNEL RECEPTION ONLY // SECURE OVERRIDE REQUIRED
+                    <p className="text-[11px] text-slate-400 mt-2 font-normal">
+                      <Link href="/" className="text-blue-400 underline font-bold">[RETURN TO PORTAL MAIN FRAME TO LOG IN]</Link>
+                    </p>
                   </div>
                 )}
               </div>
