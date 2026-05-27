@@ -10,7 +10,7 @@ export default function FieldCheckin() {
   const router = useRouter();
   const { id } = router.query;
   const voyagerId = id ? id.toString().toUpperCase() : '';
-
+const [mission, setMission] = useState<any>(null);
   // FIXED TYPESCRIPT OVERRIDES FOR STATES
   const [mission, setMission] = useState<any>(null);
   const [voyagerDocId, setVoyagerDocId] = useState('');
