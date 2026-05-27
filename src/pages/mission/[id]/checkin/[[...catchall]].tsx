@@ -25,7 +25,7 @@ export default function FieldCheckin() {
   const [statusMessage, setStatusMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // AUTOMATED BROWSER GEOLOCATION HARVESTER
+  // AUTOMATED BROWSER GEOLOCATION HARVESTER (FALLBACK DECK)
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
 
@@ -37,9 +37,9 @@ export default function FieldCheckin() {
           setLongitude(position.coords.longitude.toString());
         },
         (error) => {
-          console.warn("Telemetry coordinates declined. Falling back to base manual inputs.");
+          console.warn("Telemetry GPS coordinates declined. Relying on ZIP lookup matrix.");
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 8000 }
       );
     }
   }, []);
@@ -50,10 +50,47 @@ export default function FieldCheckin() {
 
     setSubmitting(true);
     setStatusMessage('INITIALIZING SECURE FIELD UPLINK...');
+    
+    let finalLocationText = reportedLocation.trim().toUpperCase();
+    let finalLat = latitude;
+    let finalLng = longitude;
     let uploadedImageUrl = '';
 
+    // 1. DYNAMIC GEOCODING PARSER RULE: IF USER TYPED A 5-DIGIT ZIP CODE
+    const isZipCode = /^\d{5}$/.test(reportedLocation.trim());
+    
+    if (isZipCode) {
+      try {
+        setStatusMessage('RESOLVING ZIP CODE COORDINATES & CITY BOUNDARIES...');
+        
+        // Query OpenStreetMap Nominatim database for US Postal Code details
+        const geoResponse = await fetch(
+          `https://nominatim.openstreetmap.org/search?postalcode=${reportedLocation.trim()}&country=USA&format=json&addressdetails=1`
+        );
+        const geoData = await geoResponse.json();
+        
+        if (geoData && geoData.length > 0) {
+          const matchNode = geoData[0];
+          finalLat = matchNode.lat;
+          finalLng = matchNode.lon;
+
+          // Safely extract City/Town and State abbreviation from the response properties
+          const addr = matchNode.address;
+          const city = addr.city || addr.town || addr.village || addr.hamlet || addr.county || 'UNKNOWN CITY';
+          const state = addr.state ? addr.state.toUpperCase() : 'USA';
+          
+          // Re-write final location string to City, State format
+          finalLocationText = `${city.toUpperCase()}, ${state}`;
+        } else {
+          console.warn("ZIP code not found in global tracking index.");
+        }
+      } catch (err) {
+        console.error("Geocoding service timed out, executing native string fallbacks.", err);
+      }
+    }
+
     try {
-      // 1. INLINE ACCOUNT PROVISIONING HANDSHAKE (IF REQUESTED)
+      // 2. INLINE ACCOUNT PROVISIONING HANDSHAKE (IF REQUESTED)
       if (wantsAccount) {
         if (!authEmail.trim() || !authPassword.trim()) {
           setStatusMessage('⚠️ EMAIL AND PASSWORD ARE REQUIRED FOR PROFILE REGISTRATION.');
@@ -66,7 +103,6 @@ export default function FieldCheckin() {
         const credential = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
         const newUser = credential.user;
 
-        // Save account record reference blueprint using top-level imports
         setStatusMessage('PROVISIONING PROFILE RECORD...');
         const userDocRef = doc(db, 'users', newUser.uid);
         await setDoc(userDocRef, {
@@ -77,7 +113,7 @@ export default function FieldCheckin() {
         });
       }
 
-      // 2. FILE STORAGE ASSET ARCHIVE UPLINK
+      // 3. FILE STORAGE ASSET ARCHIVE UPLINK
       if (imageFile) {
         setStatusMessage('TRANSMITTING PICTURE DATA BULK...');
         const storageRef = ref(storage, `telemetry/${voyagerId}_${Date.now()}_${imageFile.name}`);
@@ -85,17 +121,17 @@ export default function FieldCheckin() {
         uploadedImageUrl = await getDownloadURL(uploadSnapshot.ref);
       }
 
-      // 3. COMMIT TELEMETRY LAYER LOG ENTRY
+      // 4. COMMIT TELEMETRY LAYER LOG ENTRY
       setStatusMessage('SEALING TRANSACTION STREAM BLOCK...');
       await addDoc(collection(db, 'telemetryLogs'), {
         voyagerId: voyagerId,
         handlerName: handlerName.trim(),
-        reportedLocation: reportedLocation.trim().toUpperCase(),
-        latitude: latitude || 'NOT RECORDED',
-        longitude: longitude || 'NOT RECORDED',
+        reportedLocation: finalLocationText, // Saved as "CITY, STATE" string format!
+        latitude: finalLat || 'NOT RECORDED',
+        longitude: finalLng || 'NOT RECORDED',
         imageUrl: uploadedImageUrl,
         timestamp: new Date(),
-        verified: false // Awaiting Chief override signature approval
+        verified: false
       });
 
       setIsSuccess(true);
@@ -126,7 +162,7 @@ export default function FieldCheckin() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col items-center justify-center p-4 overflow-y-auto">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 flex flex-col items-center justify-center overflow-y-auto">
       
       <div className="w-full max-w-md bg-slate-900/60 border border-slate-900 rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl backdrop-blur-sm my-8">
         <header className="text-center space-y-1.5">
@@ -149,14 +185,14 @@ export default function FieldCheckin() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">CURRENT PHYSICAL LOCATION</label>
+            <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">CURRENT LOCATION OR ZIP CODE</label>
             <input 
               type="text" 
               required 
-              placeholder="E.G. TULSA, OK" 
+              placeholder="E.G. 74103 OR TULSA, OK" 
               value={reportedLocation} 
               onChange={(e) => setReportedLocation(e.target.value)} 
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" 
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-bold" 
             />
           </div>
 
