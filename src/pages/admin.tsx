@@ -136,14 +136,15 @@ export default function AdminDashboard() {
     let uploadedImageUrl = '';
 
     try {
-      // Handle asset image upload if provided
       if (launchImageFile) {
         const storageRef = ref(storage, `launches/${targetVesselId}_${Date.now()}_${launchImageFile.name}`);
         const uploadSnapshot = await uploadBytes(storageRef, launchImageFile);
         uploadedImageUrl = await getDownloadURL(uploadSnapshot.ref);
       }
 
-      // Save complete entry baseline deck to Firestore voyagerMissions
+      const launchTimestampIso = new Date().toISOString();
+
+      // 1. Save complete entry baseline deck to Firestore voyagerMissions
       await setDoc(doc(db, 'voyagerMissions', targetVesselId), {
         missionId: targetVesselId,
         originCity: launchOriginCity.trim(),
@@ -151,7 +152,21 @@ export default function AdminDashboard() {
         latitude: launchLatitude.trim(),
         longitude: launchLongitude.trim(),
         launchImageUrl: uploadedImageUrl,
-        launchDate: new Date().toISOString()
+        launchDate: launchTimestampIso
+      });
+
+      // 2. SEED INITIAL WAYPOINT LOG SO THE MAP INDICATOR DIGESTS IT INSTANTLY
+      const initialSeedLogRef = doc(collection(db, 'telemetryLogs'));
+      await setDoc(initialSeedLogRef, {
+        voyagerId: targetVesselId,
+        handlerName: 'SYSTEM CONSOLE',
+        reportedLocation: `DEPLOYMENT VECTOR: ${launchOriginCity.trim().toUpperCase()}`,
+        latitude: launchLatitude.trim(),
+        longitude: launchLongitude.trim(),
+        imageUrl: uploadedImageUrl,
+        timestamp: new Date(),
+        verified: true,
+        isLaunchPad: true
       });
 
       // Reset fields and collapse modal frame
@@ -217,21 +232,21 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-6 flex flex-col h-screen overflow-hidden">
       
-      {/* HEADER CONTROL BLOCK */}
-      <header className="pb-4 border-b border-slate-900 flex justify-between items-center shrink-0">
+      {/* BULLETPROOF GRID HEADER CONTROL BLOCK */}
+      <header className="pb-4 border-b border-slate-900 grid grid-cols-1 md:grid-cols-2 items-center gap-4 shrink-0">
         <div>
           <h1 className="text-xl font-black tracking-widest uppercase text-slate-100">COMMAND CONTROL CENTER</h1>
           <p className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-widest mt-0.5">Secure Mainframe Override Panel</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex md:justify-end items-center space-x-3 w-full">
           {/* INTERACTIVE LAUNCH INITIATION ACTION TRIGGER */}
           <button
             onClick={() => { setLaunchError(''); setIsLaunchModalOpen(true); }}
-            className="text-xs font-mono font-black bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-xl transition-all uppercase tracking-wider text-white shadow-lg"
+            className="text-xs font-mono font-black bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 rounded-xl transition-all uppercase tracking-wider text-white shadow-lg whitespace-nowrap"
           >
             🚀 Launch New TV
           </button>
-          <Link href="/" className="text-xs font-mono font-bold bg-slate-900 border border-slate-800 hover:bg-slate-800 px-4 py-2 rounded-xl transition-all uppercase tracking-wider text-slate-200">
+          <Link href="/" className="text-xs font-mono font-bold bg-slate-900 border border-slate-800 hover:bg-slate-800 px-4 py-2.5 rounded-xl transition-all uppercase tracking-wider text-slate-200 whitespace-nowrap">
             ← Main Console
           </Link>
         </div>
