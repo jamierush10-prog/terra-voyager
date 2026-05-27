@@ -21,7 +21,7 @@ export default function AdminDashboard() {
   const [isRegistering, setIsRegistering] = useState(false);
 
   // Live Stream Feed Datasets
-  const [deployedMissions, setDeployedMissions] = useState([]);
+  const [deployedMissions, setDeployedMissions] = useState<any[]>([]);
   const [allCheckinLogs, setAllCheckinLogs] = useState([]);
   const [loadingFeeds, setLoadingFeeds] = useState(true);
 
