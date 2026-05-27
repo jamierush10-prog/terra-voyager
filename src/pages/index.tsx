@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 export default function Home() {
   const router = useRouter();
-  const [missionIdInput, setMissionIdInput] = useState('');
+  const [vesselIdInput, setVesselIdInput] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
 
@@ -42,13 +42,13 @@ export default function Home() {
     return () => unsubscribeAuth();
   }, []);
 
-  const handleTrackVectorId = async (e: React.FormEvent) => {
+  const handleTrackVesselId = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!missionIdInput.trim()) return;
+    if (!vesselIdInput.trim()) return;
 
     setSearching(true);
     setSearchError('');
-    const targetId = missionIdInput.trim().toUpperCase();
+    const targetId = vesselIdInput.trim().toUpperCase();
 
     try {
       const docRef = doc(db, 'voyagerMissions', targetId);
@@ -57,11 +57,11 @@ export default function Home() {
       if (docSnap.exists()) {
         router.push(`/mission/${targetId.toLowerCase()}`);
       } else {
-        setSearchError(`Vector node [${targetId}] is not registered in the central mainframe grid.`);
+        setSearchError(`Vessel node [${targetId}] is not registered in the central routing network.`);
       }
     } catch (err) {
       console.error("Search system error:", err);
-      setSearchError('Transmission fault occurred while querying database grid.');
+      setSearchError('Transmission fault occurred while querying vessel database.');
     } finally {
       setSearching(false);
     }
@@ -80,15 +80,15 @@ export default function Home() {
           <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Global Object Telemetry Engine // v1.0.0</p>
         </header>
 
-        {/* VECTOR TRACKING SEARCH INPUT TERMINAL */}
-        <form onSubmit={handleTrackVectorId} className="space-y-4">
+        {/* VESSEL TRACKING SEARCH INPUT TERMINAL */}
+        <form onSubmit={handleTrackVesselId} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-mono font-bold tracking-widest text-slate-400 uppercase block">ENTER REGISTRY VECTOR ID</label>
+            <label className="text-[10px] font-mono font-bold tracking-widest text-slate-400 uppercase block">ENTER REGISTRY VESSEL ID</label>
             <input
               type="text"
               placeholder="e.g. TV-20"
-              value={missionIdInput}
-              onChange={(e) => setMissionIdInput(e.target.value)}
+              value={vesselIdInput}
+              onChange={(e) => setVesselIdInput(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-center font-mono font-bold uppercase text-slate-100 tracking-widest focus:outline-none focus:border-blue-500 transition-all text-sm shadow-inner"
               disabled={searching}
             />
@@ -97,7 +97,7 @@ export default function Home() {
           <button
             type="submit"
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-mono text-xs font-bold uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all shadow-lg active:scale-[0.99] disabled:opacity-50"
-            disabled={searching || !missionIdInput.trim()}
+            disabled={searching || !vesselIdInput.trim()}
           >
             {searching ? 'LINKING CODES...' : 'CONNECT UPLINK FEED'}
           </button>
