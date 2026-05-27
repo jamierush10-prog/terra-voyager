@@ -34,7 +34,7 @@ export default function VesselControl() {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
-  const [isMapCollapsed, setIsMapCollapsed] = useState(false); // MAP COLLAPSE STATE
+  const [isMapCollapsed, setIsMapCollapsed] = useState(false); 
 
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -228,19 +228,23 @@ export default function VesselControl() {
               </Link>
             )}
             <div className="flex justify-between items-center w-full">
-              <div className="flex items-center space-x-3">
-                <h1 className="text-2xl font-black tracking-wider text-slate-100 uppercase">VESSEL // {voyagerId}</h1>
+              {/* STACKED VESSEL TYPOGRAPHY SECTION WITH NO // */}
+              <div className="flex flex-col">
+                <span className="text-xs font-mono font-bold tracking-widest text-slate-400 uppercase">VESSEL</span>
+                <h1 className="text-3xl font-black tracking-wider text-slate-100 uppercase leading-none mt-1">{voyagerId}</h1>
+              </div>
+              <div className="flex items-center space-x-2">
                 <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-widest uppercase rounded bg-blue-950/60 text-blue-400 border border-blue-900/40">
                   IN TRANSIT
                 </span>
+                {/* MOBILE COLLAPSE MAP BUTTON */}
+                <button 
+                  onClick={() => setIsMapCollapsed(!isMapCollapsed)} 
+                  className="md:hidden bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-800 font-mono text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all"
+                >
+                  {isMapCollapsed ? 'Expand Map' : 'Collapse Map'}
+                </button>
               </div>
-              {/* MOBILE COLLAPSE MAP BUTTON */}
-              <button 
-                onClick={() => setIsMapCollapsed(!isMapCollapsed)} 
-                className="md:hidden bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-800 font-mono text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all"
-              >
-                {isMapCollapsed ? 'Expand Map' : 'Collapse Map'}
-              </button>
             </div>
             {vesselMeta && <p className="text-xs font-mono text-slate-300 uppercase tracking-wide">Routing Node Matrix: {vesselMeta.originCity} → {vesselMeta.destinationCity}</p>}
           </div>
