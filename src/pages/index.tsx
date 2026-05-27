@@ -77,13 +77,13 @@ export default function Home() {
       <main className="w-full max-w-md bg-slate-900/40 backdrop-blur-xl border border-slate-900 rounded-2xl p-6 space-y-8 shadow-2xl relative z-10">
         <header className="text-center space-y-2">
           <h1 className="text-2xl font-black tracking-widest text-slate-200 uppercase">TERRA VOYAGER</h1>
-          <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Global Object Telemetry Engine // v1.0.0</p>
+          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest font-bold">Global Object Telemetry Engine // v1.0.0</p>
         </header>
 
         {/* VESSEL TRACKING SEARCH INPUT TERMINAL */}
         <form onSubmit={handleTrackVesselId} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-mono font-bold tracking-widest text-slate-400 uppercase block">ENTER REGISTRY VESSEL ID</label>
+            <label className="text-[10px] font-mono font-bold tracking-widest text-slate-200 uppercase block">ENTER REGISTRY VESSEL ID</label>
             <input
               type="text"
               placeholder="e.g. TV-20"
@@ -110,28 +110,28 @@ export default function Home() {
         </form>
 
         {/* PORTAL GATEWAY NAVIGATION ROUTER */}
-        <div className="border-t border-slate-900/80 pt-5 text-center font-mono text-[10px] uppercase tracking-wider space-y-3">
+        <div className="border-t border-slate-900/80 pt-5 text-center font-mono text-[11px] uppercase tracking-wider space-y-3">
           {authLoading ? (
-            <span className="text-slate-600 animate-pulse">SCANNING BIOMETRIC ACCESS TOKENS...</span>
+            <span className="text-white font-black animate-pulse">SCANNING BIOMETRIC ACCESS TOKENS...</span>
           ) : currentUser && userProfile ? (
             <div className="space-y-2.5">
-              <p className="text-slate-400 font-bold">Authorized Handle: <span className="text-blue-400 font-black">📡 {userProfile.username}</span></p>
+              <p className="text-slate-200 font-bold">Authorized Handle: <span className="text-blue-400 font-black">📡 {userProfile.username}</span></p>
               <div className="flex justify-center gap-4">
                 {userProfile.role === 'admin' && (
-                  <Link href="/admin" className="text-emerald-500 hover:underline font-bold">
+                  <Link href="/admin" className="text-emerald-400 hover:underline font-black">
                     [Command Console]
                   </Link>
                 )}
-                <Link href="/api/auth/signout" className="text-slate-500 hover:underline">
+                <Link href="/api/auth/signout" className="text-slate-300 hover:underline font-bold">
                   [Disconnect Uplink]
                 </Link>
               </div>
             </div>
           ) : (
-            <p className="text-slate-500">
-              Field Handler?{' '}
-              <Link href="/login" className="text-blue-500 hover:underline font-bold">
-                [Enlist Secure Key Override]
+            <p className="text-slate-300 font-bold tracking-wide">
+              FIELD HANDLER?{' '}
+              <Link href="/login" className="text-blue-400 hover:underline font-black">
+                [LOGIN // ENLIST ACCESS KEY]
               </Link>
             </p>
           )}
