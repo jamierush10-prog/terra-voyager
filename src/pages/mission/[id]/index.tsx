@@ -86,7 +86,6 @@ export default function VesselControl() {
     return includeYear ? `${String(Math.floor(totalDays / 365)).padStart(2, '0')}:${String(totalDays % 365).padStart(3, '0')}:${hh}:${mm}:${ss}` : `${String(totalDays).padStart(3, '0')}:${hh}:${mm}:${ss}`;
   };
 
-  // AUTOMATED 30-DAY CRITICAL TIMEOUT CALCULATION ENGINE
   const isVesselMissing = (() => {
     const currentTimeMs = new Date().getTime();
     if (logs.length > 0) {
@@ -129,6 +128,7 @@ export default function VesselControl() {
         const data = doc.data();
         if (data.voyagerId && data.voyagerId.toUpperCase() === voyagerId) fetchedLogs.push({ id: doc.id, ...data });
       });
+      // Chronological order (oldest to newest)
       fetchedLogs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
       setLogs(fetchedLogs);
       setLoading(false);
@@ -162,12 +162,23 @@ export default function VesselControl() {
     });
   }
 
-  logs.forEach((log) => {
+  logs.forEach((log, idx) => {
+    // BLUE STAR LOGIC: A log gets verified if there is a LATER log that is approved/verified.
+    // This proves they successfully handed it off to the next person!
+    let isLogHandedOffAndVerified = false;
+    for (let i = idx + 1; i < logs.length; i++) {
+      if (logs[i].verified === true) {
+        isLogHandedOffAndVerified = true;
+        break;
+      }
+    }
+
     unifiedWaypointTimeline.push({
       ...log,
       isLaunchPad: false,
       displayDateRaw: log.timestamp, 
-      displayIndex: unifiedWaypointTimeline.length + 1
+      displayIndex: unifiedWaypointTimeline.length + 1,
+      hasEarnedBlueStar: isLogHandedOffAndVerified
     });
   });
 
@@ -203,7 +214,7 @@ export default function VesselControl() {
 
   const handleSendCommsMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !userProfile || !hasVerifiedCheckinAccess) return;
+    if (!newMessage.trim() || !userProfile) return;
     try {
       await addDoc(collection(db, 'crewComms'), {
         voyagerId: voyagerId,
@@ -224,9 +235,18 @@ export default function VesselControl() {
   const isCenterValid = currentMapCenter && !isNaN(currentMapCenter[0]) && !isNaN(currentMapCenter[1]);
   const newestFirstLedgerDisplayList = [...unifiedWaypointTimeline].reverse();
 
-  const hasVerifiedCheckinAccess = userProfile?.role === 'admin' || logs.some(log => 
-    log.handlerName && userProfile?.username && log.handlerName.trim().toLowerCase() === userProfile.username.trim().toLowerCase()
-  );
+  // Helper function to check if a user is in our local list of verified handoff stars
+  const checkUsernameHasStarInTimeline = (name: string) => {
+    if (!name) return false;
+    return logs.some((log, idx) => {
+      if (log.handlerName && log.handlerName.trim().toLowerCase() === name.trim().toLowerCase()) {
+        for (let i = idx + 1; i < logs.length; i++) {
+          if (logs[i].verified === true) return true;
+        }
+      }
+      return false;
+    });
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col h-screen overflow-hidden">
@@ -246,8 +266,6 @@ export default function VesselControl() {
                 <h1 className="text-3xl font-black tracking-wider text-slate-100 uppercase leading-none mt-1">{voyagerId}</h1>
               </div>
               <div className="flex items-center space-x-2">
-                
-                {/* CONDITIONAL SYSTEM BADGE MATRIX */}
                 {isVesselMissing ? (
                   <span className="px-2 py-0.5 text-[10px] font-mono font-black tracking-widest uppercase rounded bg-yellow-950/80 text-yellow-400 border border-yellow-600/50 animate-pulse">
                     MISSING
@@ -257,11 +275,7 @@ export default function VesselControl() {
                     IN TRANSIT
                   </span>
                 )}
-
-                <button 
-                  onClick={() => setIsMapCollapsed(!isMapCollapsed)} 
-                  className="md:hidden bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-800 font-mono text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all"
-                >
+                <button onClick={() => setIsMapCollapsed(!isMapCollapsed)} className="md:hidden bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-800 font-mono text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all">
                   {isMapCollapsed ? 'Expand Map' : 'Collapse Map'}
                 </button>
               </div>
@@ -292,7 +306,7 @@ export default function VesselControl() {
                   <Marker key={log.id} position={[log.lat, log.lng]}>
                     <Popup>
                       <div className="text-slate-900 font-mono text-xs font-bold">
-                        Checkpoint #{log.displayIndex}<br/>Handler: {log.handlerName}<br/>Location: {log.reportedLocation}
+                        Checkpoint #{log.displayIndex}<br/>Handler: {log.handlerName} {log.hasEarnedBlueStar && '🔷'}
                       </div>
                     </Popup>
                   </Marker>
@@ -321,26 +335,30 @@ export default function VesselControl() {
                       <div className="flex items-center space-x-2 text-[13px]">
                         <span className="text-blue-400 font-black">#{log.displayIndex}</span>
                         <span className="text-slate-100 font-bold">Sign-off:</span>
-                        <span className="text-white font-black tracking-wide">{log.handlerName}</span>
+                        <span className="text-white font-black tracking-wide flex items-center">
+                          {log.handlerName}
+                          {/* INJECT BLUE STAR BADGE ON LEDGER */}
+                          {log.hasEarnedBlueStar && (
+                            <span className="ml-1.5 text-blue-400 text-xs bg-blue-950/80 border border-blue-500/30 px-1 py-0.5 rounded font-black tracking-tighter text-[9px]">
+                              🔷 {voyagerId}
+                            </span>
+                          )}
+                        </span>
                       </div>
                       <span className="bg-slate-950 px-2.5 py-1 rounded-md text-white border border-slate-800 font-black uppercase tracking-wide text-[12px]">
                         📍 {log.reportedLocation.includes("DEPLOYMENT") ? "ORIGIN BASE" : log.reportedLocation}
                       </span>
                     </div>
 
-                    {log.imageUrl ? (
+                    {log.imageUrl && (
                       <div className="relative border border-slate-950 bg-slate-950 rounded-lg overflow-hidden shadow-inner">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={log.imageUrl} alt="Verification Asset" className="w-full h-auto max-h-80 object-cover rounded-md mx-auto" />
                       </div>
-                    ) : log.isLaunchPad && (
-                      <div className="p-8 text-center text-xs border border-dashed border-slate-800 rounded-xl bg-slate-950/40 text-slate-100 uppercase tracking-widest font-mono font-bold">
-                        📦 Vessel Sealed and Launched Successfully // Stationery In Transit
-                      </div>
                     )}
 
                     <div className="text-[11px] font-mono text-slate-200 uppercase tracking-widest flex justify-between items-center bg-slate-950/40 p-2 rounded-lg border border-slate-900/40">
-                      <span className="font-bold">{log.isLaunchPad ? "Initial Base Setup" : "Verified Field Check-in"}</span>
+                      <span className="font-bold">{log.isLaunchPad ? "Initial Base Setup" : log.verified ? "Verified Check-in" : "Pending Verification"}</span>
                       <span className="text-white font-black tracking-normal">
                         ⏰ {formatDisplayDateTime(log.displayDateRaw)}
                       </span>
@@ -356,35 +374,39 @@ export default function VesselControl() {
                       {chatMessages.length === 0 ? (
                         <div className="text-center py-12 text-slate-300 uppercase text-[11px] font-bold">Secure Channel Established. Begin Comms Broadcast...</div>
                       ) : (
-                        chatMessages.map((msg) => (
-                          <div key={msg.id} className="p-2.5 bg-slate-900/40 border border-slate-900/60 rounded-xl space-y-1">
-                            <div className="flex justify-between items-center border-b border-slate-950/40 pb-1 text-[11px]">
-                              <span className="text-blue-400 font-black">📡 {msg.username}</span>
-                              <span className="text-slate-200 font-bold">
-                                ⏰ {formatDisplayDateTime(msg.timestamp)}
-                              </span>
+                        chatMessages.map((msg) => {
+                          const userHasStar = checkUsernameHasStarInTimeline(msg.username);
+                          return (
+                            <div key={msg.id} className="p-2.5 bg-slate-900/40 border border-slate-900/60 rounded-xl space-y-1">
+                              <div className="flex justify-between items-center border-b border-slate-950/40 pb-1 text-[11px]">
+                                <span className="text-blue-400 font-black flex items-center">
+                                  📡 {msg.username}
+                                  {/* INJECT BLUE STAR BADGE ON COMMS DECK FEED */}
+                                  {userHasStar && (
+                                    <span className="ml-1.5 text-blue-400 text-[8px] bg-blue-950/80 border border-blue-500/30 px-1 py-0.5 rounded font-black tracking-tighter">
+                                      🔷 {voyagerId}
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-slate-200 font-bold">
+                                  ⏰ {formatDisplayDateTime(msg.timestamp)}
+                                </span>
+                              </div>
+                              <p className="text-slate-100 break-words pt-0.5 text-[13px] font-bold">{msg.messageText}</p>
                             </div>
-                            <p className="text-slate-100 break-words pt-0.5 text-[13px] font-bold">{msg.messageText}</p>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
 
-                    {hasVerifiedCheckinAccess ? (
-                      <form onSubmit={handleSendCommsMessage} className="border-t border-slate-900 pt-3 flex items-center space-x-2 shrink-0 bg-slate-950/40">
-                        <input type="text" placeholder={`Transmit as ${userProfile.username}...`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-100 focus:outline-none focus:border-blue-500 font-bold" />
-                        <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-xs font-bold uppercase py-3 px-5 rounded-xl transition-all shadow">Send</button>
-                      </form>
-                    ) : (
-                      <div className="border-t border-slate-900 pt-3 bg-slate-950/40 p-4 rounded-xl text-center font-mono text-[11px] text-rose-400 bg-rose-950/20 border border-rose-950/30 uppercase tracking-wider font-bold">
-                        🔒 TRANSMISSION MUTED // RECEIVE ONLY
-                        <p className="text-[10px] text-slate-300 tracking-normal lowercase mt-1 font-normal">You must physically handle and check in vessel {voyagerId} to unlock its communication uplink channel.</p>
-                      </div>
-                    )}
+                    <form onSubmit={handleSendCommsMessage} className="border-t border-slate-900 pt-3 flex items-center space-x-2 shrink-0 bg-slate-950/40">
+                      <input type="text" placeholder={`Transmit as ${userProfile.username}...`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-100 focus:outline-none focus:border-blue-500 font-bold" />
+                      <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-xs font-bold uppercase py-3 px-5 rounded-xl transition-all shadow">Send</button>
+                    </form>
                   </div>
                 ) : (
                   <div className="text-center py-12 font-mono text-xs text-slate-200 font-bold">
-                    COMMS CHANNEL RECEPTION ONLY // SECURE OVERRIDE REQUIRED
+                    COMMS CHANNEL SECURE OVERRIDE REQUIRED
                     <p className="text-[11px] text-slate-400 mt-2 font-normal">
                       <Link href="/" className="text-blue-400 underline font-bold">[RETURN TO PORTAL MAIN FRAME TO LOG IN]</Link>
                     </p>

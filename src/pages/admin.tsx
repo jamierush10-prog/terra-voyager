@@ -72,7 +72,6 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!isAuthorized) return;
 
-    // Stream Active Deployed Vessels
     const mCollection = collection(db, 'voyagerMissions');
     const unsubscribeVessels = onSnapshot(mCollection, (snapshot) => {
       const fetchedVessels: any[] = [];
@@ -83,14 +82,14 @@ export default function AdminDashboard() {
       setVessels(fetchedVessels);
     });
 
-    // Stream Check-in Logs
     const logsCollection = collection(db, 'telemetryLogs');
     const unsubscribeLogs = onSnapshot(logsCollection, (snapshot) => {
       const fetchedLogs: any[] = [];
       snapshot.forEach((doc) => {
         fetchedLogs.push({ id: doc.id, ...doc.data() });
       });
-      fetchedLogs.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+      // Sort chronologically to properly calculate the handoff sequence
+      fetchedLogs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
       setLogs(fetchedLogs);
       setLoading(false);
     }, (err) => {
@@ -101,7 +100,6 @@ export default function AdminDashboard() {
     return () => { unsubscribeVessels(); unsubscribeLogs(); };
   }, [isAuthorized]);
 
-  // ON-THE-FLY RANDOM CHARACTER LINK GENERATOR (12-15 CHARACTERS LONG)
   const generateRandomUrlString = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
     const length = Math.floor(Math.random() * 4) + 12;
@@ -124,7 +122,6 @@ export default function AdminDashboard() {
     }).catch(err => console.error("Clipboard routing fault:", err));
   };
 
-  // --- SUBMIT CORE NEW VESSEL LAUNCH LOGIC ---
   const handleLaunchNewVessel = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetVesselId = launchVoyagerId.trim().toUpperCase();
@@ -144,7 +141,6 @@ export default function AdminDashboard() {
 
       const launchTimestampIso = new Date().toISOString();
 
-      // 1. Save complete entry baseline deck to Firestore voyagerMissions
       await setDoc(doc(db, 'voyagerMissions', targetVesselId), {
         missionId: targetVesselId,
         originCity: launchOriginCity.trim(),
@@ -155,7 +151,6 @@ export default function AdminDashboard() {
         launchDate: launchTimestampIso
       });
 
-      // 2. SEED INITIAL WAYPOINT LOG SO THE MAP INDICATOR DIGESTS IT INSTANTLY
       const initialSeedLogRef = doc(collection(db, 'telemetryLogs'));
       await setDoc(initialSeedLogRef, {
         voyagerId: targetVesselId,
@@ -169,7 +164,6 @@ export default function AdminDashboard() {
         isLaunchPad: true
       });
 
-      // Reset fields and collapse modal frame
       setLaunchVoyagerId('');
       setLaunchOriginCity('');
       setLaunchDestinationCity('');
@@ -225,40 +219,46 @@ export default function AdminDashboard() {
     return isNaN(d.getTime()) ? 'Invalid Time' : d.toLocaleString();
   };
 
+  // Helper inside the map to determine if a specific log entry has earned its verification handoff status
+  const checkLogHasEarnedHandoffStar = (currentLog: any, currentIndex: number, allLogs: any[]) => {
+    if (!currentLog.voyagerId) return false;
+    // Look through all succeeding logs for the SAME vessel to find if at least one newer check-in is verified
+    const vesselLogs = allLogs.filter(l => l.voyagerId && l.voyagerId.toUpperCase() === currentLog.voyagerId.toUpperCase());
+    const internalVesselIdx = vesselLogs.findIndex(l => l.id === currentLog.id);
+    
+    if (internalVesselIdx === -1) return false;
+    for (let i = internalVesselIdx + 1; i < vesselLogs.length; i++) {
+      if (vesselLogs[i].verified === true) return true;
+    }
+    return false;
+  };
+
   if (checkingAccess) {
     return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-mono text-xs text-slate-400 animate-pulse uppercase tracking-widest">Verifying Admin Security Clearance...</div>;
   }
 
+  // Reverse logs right at render time so newest streams sit at the top visually
+  const displayLogsNewestFirst = [...logs].reverse();
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-6 flex flex-col h-screen overflow-hidden">
       
-      {/* BULLETPROOF GRID HEADER CONTROL BLOCK */}
       <header className="pb-4 border-b border-slate-900 grid grid-cols-1 md:grid-cols-2 items-center gap-4 shrink-0">
         <div>
           <h1 className="text-xl font-black tracking-widest uppercase text-slate-100">COMMAND CONTROL CENTER</h1>
           <p className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-widest mt-0.5">Secure Mainframe Override Panel</p>
         </div>
         <div className="flex md:justify-end items-center space-x-3 w-full">
-          {/* INTERACTIVE LAUNCH INITIATION ACTION TRIGGER */}
-          <button
-            onClick={() => { setLaunchError(''); setIsLaunchModalOpen(true); }}
-            className="text-xs font-mono font-black bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 rounded-xl transition-all uppercase tracking-wider text-white shadow-lg whitespace-nowrap"
-          >
-            🚀 Launch New TV
-          </button>
           <Link href="/" className="text-xs font-mono font-bold bg-slate-900 border border-slate-800 hover:bg-slate-800 px-4 py-2.5 rounded-xl transition-all uppercase tracking-wider text-slate-200 whitespace-nowrap">
             ← Main Console
           </Link>
         </div>
       </header>
 
-      {/* ADMIN CONTROL RUNTIME INTERFACE */}
       <main className="flex-1 overflow-y-auto space-y-6 mt-4 pr-1">
         
-        {/* SECTION 1: ACTIVE FLEET REGISTRY PORTAL LOGISTICS */}
         <div className="bg-slate-900/40 border border-slate-900 rounded-2xl p-4 shadow-2xl space-y-3">
           <h2 className="text-xs font-mono font-black tracking-widest text-slate-200 uppercase">Active Deployed Vessels</h2>
-          
           {vessels.length === 0 ? (
             <p className="text-[11px] font-mono text-slate-500 uppercase">No active vessel nodes found in system database registry.</p>
           ) : (
@@ -269,13 +269,10 @@ export default function AdminDashboard() {
                     <span className="text-white font-black text-[13px] block">{vessel.id}</span>
                     <span className="text-[9px] text-slate-400 block truncate mt-0.5">Matrix Enabled</span>
                   </div>
-                  
                   <button
                     onClick={() => handleCopyRandomizedCheckinLink(vessel)}
                     className={`w-full text-center font-bold text-[10px] py-1.5 px-2 rounded-lg uppercase tracking-wider transition-all shadow ${
-                      copiedVesselId === vessel.id 
-                        ? 'bg-emerald-600 text-white' 
-                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      copiedVesselId === vessel.id ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
                     }`}
                   >
                     {copiedVesselId === vessel.id ? '✓ Link Copied' : 'Copy Link'}
@@ -286,7 +283,6 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* SECTION 2: TRANSFERRED TELEMETRY LOG FEEDS */}
         <div className="bg-slate-900/40 border border-slate-900 rounded-2xl flex flex-col shadow-2xl">
           <div className="p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur">
             <h2 className="text-xs font-mono font-black tracking-widest text-slate-200 uppercase">Incoming Fleet Telemetry Stream Logs</h2>
@@ -295,104 +291,59 @@ export default function AdminDashboard() {
           <div className="p-4 max-h-[500px] overflow-y-auto">
             {loading ? (
               <div className="text-center py-6 font-mono text-xs text-slate-500 animate-pulse">SYNCHRONIZING FEED LAYERS...</div>
-            ) : logs.length === 0 ? (
+            ) : displayLogsNewestFirst.length === 0 ? (
               <div className="text-center py-6 font-mono text-xs text-slate-500 uppercase tracking-widest">No Telemetry streams captured in cloud nodes yet.</div>
             ) : (
               <div className="space-y-3">
-                {logs.map((log) => (
-                  <div key={log.id} className="p-4 bg-slate-950/80 border border-slate-900 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 font-mono text-xs shadow-md">
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex items-center space-x-3 flex-wrap gap-y-1">
-                        <span className="text-blue-400 font-black text-sm tracking-wider">{log.voyagerId || 'UNKNOWN'}</span>
-                        <span className="text-slate-100 font-bold">Sign-off: <span className="text-white font-black">{log.handlerName || 'None'}</span></span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-900 text-slate-300 border border-slate-800">
-                          📍 {log.reportedLocation || 'UNRESOLVED'}
-                        </span>
-                        {log.verified && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-950/80 text-emerald-400 border border-emerald-900/40 tracking-widest">
-                            ✓ Verified
-                          </span>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-slate-300 pt-0.5">
-                        <div><span className="text-slate-500 font-bold">LAT:</span> {log.latitude || 'NOT SET'}</div>
-                        <div><span className="text-slate-500 font-bold">LONG:</span> {log.longitude || 'NOT SET'}</div>
-                        <div className="col-span-2 text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Timestamp: {formatDisplayDate(log.timestamp)}</div>
-                      </div>
-                    </div>
+                {displayLogsNewestFirst.map((log, idx) => {
+                  // Calculate index against original chronologically sorted state array
+                  const originalStateIndex = logs.findIndex(l => l.id === log.id);
+                  const isHandoffVerified = checkLogHasEarnedHandoffStar(log, originalStateIndex, logs);
 
-                    <button
-                      onClick={() => openCorrectionModal(log)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] px-3.5 py-2 rounded-lg transition-all uppercase tracking-wider shrink-0 shadow w-full sm:w-auto text-center"
-                    >
-                      Correct Data
-                    </button>
-                  </div>
-                ))}
+                  return (
+                    <div key={log.id} className="p-4 bg-slate-950/80 border border-slate-900 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 font-mono text-xs shadow-md">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center space-x-3 flex-wrap gap-y-1">
+                          <span className="text-blue-400 font-black text-sm tracking-wider">{log.voyagerId || 'UNKNOWN'}</span>
+                          <span className="text-slate-100 font-bold">Sign-off: <span className="text-white font-black">{log.handlerName || 'None'}</span></span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-900 text-slate-300 border border-slate-800">
+                            📍 {log.reportedLocation || 'UNRESOLVED'}
+                          </span>
+                          {log.verified && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-950/40 text-emerald-400 border border-emerald-900/40">
+                              ✓ Approved Log
+                            </span>
+                          )}
+                          {/* INJECT DYNAMIC HANDOFF STAR DISPLAY LOGIC INSIDE STREAM */}
+                          {isHandoffVerified && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-blue-950/80 text-blue-400 border border-blue-900/40 tracking-wider">
+                              🔷 Handoff Star Earned
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-slate-300 pt-0.5">
+                          <div><span className="text-slate-500 font-bold">LAT:</span> {log.latitude || 'NOT SET'}</div>
+                          <div><span className="text-slate-500 font-bold">LONG:</span> {log.longitude || 'NOT SET'}</div>
+                          <div className="col-span-2 text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Timestamp: {formatDisplayDate(log.timestamp)}</div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => openCorrectionModal(log)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] px-3.5 py-2 rounded-lg transition-all uppercase tracking-wider shrink-0 shadow w-full sm:w-auto text-center"
+                      >
+                        Correct Data
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
       </main>
 
-      {/* --- MODAL DIALOG 1: VESSEL PROVISIONING LAUNCH TERMINAL --- */}
-      {isLaunchModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-2xl relative font-mono text-xs text-slate-100">
-            <header className="text-center space-y-1">
-              <h3 className="text-sm font-black tracking-widest uppercase text-white">PROVISION & LAUNCH CONTAINER</h3>
-              <p className="text-[9px] text-slate-400 uppercase tracking-wider">Initialize Fleet Module Baseline Coordinates</p>
-            </header>
-
-            <form onSubmit={handleLaunchNewVessel} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-300 uppercase">VESSEL ID IDENTIFIER (E.G. TV-20)</label>
-                <input type="text" required placeholder="TV-XX" value={launchVoyagerId} onChange={(e) => setLaunchVoyagerId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold uppercase" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-300 uppercase">ORIGIN (LOCATION)</label>
-                  <input type="text" required placeholder="e.g. DAPHNE, AL" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-300 uppercase">DESTINATION TARGET</label>
-                  <input type="text" required placeholder="e.g. BOSTON, MA" value={launchDestinationCity} onChange={(e) => setLaunchDestinationCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LATITUDE (X)</label>
-                  <input type="text" required placeholder="e.g. 30.6035" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LONGITUDE (Y)</label>
-                  <input type="text" required placeholder="e.g. -87.9011" value={launchLongitude} onChange={(e) => setLaunchLongitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-300 uppercase">ATTACH LAUNCH PROFILE IMAGE</label>
-                <input type="file" accept="image/*" onChange={(e) => setLaunchImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
-              </div>
-
-              {launchError && <p className="text-rose-400 text-[10px] text-center uppercase bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {launchError}</p>}
-
-              <div className="pt-2 flex flex-col space-y-2">
-                <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-widest py-3 px-4 rounded-xl transition-all disabled:opacity-50">
-                  {launchingAction ? 'COMMITTING PROFILE TO CLOUD...' : 'INITIALIZE DEPLOYMENT PATH'}
-                </button>
-                <button type="button" onClick={() => setIsLaunchModalOpen(false)} className="w-full bg-transparent text-slate-400 hover:text-slate-200 uppercase tracking-wider py-1 font-bold text-[10px]">
-                  [Abort Provisioning Request]
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DIALOG 2: TELEMETRY CALIBRATION CONTROL MODAL */}
+      {/* TELEMETRY CALIBRATION OVERRIDE MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-2xl relative font-mono text-xs text-slate-100">
