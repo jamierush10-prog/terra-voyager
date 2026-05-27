@@ -15,7 +15,7 @@ export default function AdminDashboard() {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
-  // COPIED STATE ALERT EFFECT
+  // COPIED ALERT TIMER HOOK
   const [copiedVesselId, setCopiedVesselId] = useState('');
 
   // CONTROL MODAL INTERFACE STATES
@@ -60,7 +60,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!isAuthorized) return;
 
-    // Stream Active Vessels
+    // Stream Active Deployed Vessels
     const mCollection = collection(db, 'voyagerMissions');
     const unsubscribeVessels = onSnapshot(mCollection, (snapshot) => {
       const fetchedVessels: any[] = [];
@@ -89,14 +89,24 @@ export default function AdminDashboard() {
     return () => { unsubscribeVessels(); unsubscribeLogs(); };
   }, [isAuthorized]);
 
-  // TACTICAL CLIPBOARD COPY FLOW WITH TOKEN FALLBACK
-  const handleCopyCheckinLink = (vessel: any) => {
+  // ON-THE-FLY RANDOM CHARACTER LINK GENERATOR (12-15 CHARACTERS LONG)
+  const generateRandomUrlString = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    const length = Math.floor(Math.random() * 4) + 12; // Generates a random length between 12 and 15
+    let randomString = '';
+    for (let i = 0; i < length; i++) {
+      randomString += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return randomString;
+  };
+
+  const handleCopyRandomizedCheckinLink = (vessel: any) => {
     const vesselIdLower = vessel.id.toLowerCase();
-    
-    // Fallback securely if a token hasn't been generated in the DB yet
-    const targetToken = vessel.secureToken || 'UnassignedTokenKey';
     const cleanOrigin = window.location.origin;
-    const directCheckinUrl = `${cleanOrigin}/mission/${vesselIdLower}/checkin?token=${targetToken}`;
+    const randomSuffix = generateRandomUrlString();
+    
+    // Formats path to: https://tvmc.net/mission/tv-20/checkin/aB3K9xZp2LmQ
+    const directCheckinUrl = `${cleanOrigin}/mission/${vesselIdLower}/checkin/${randomSuffix}`;
     
     navigator.clipboard.writeText(directCheckinUrl).then(() => {
       setCopiedVesselId(vessel.id);
@@ -167,7 +177,7 @@ export default function AdminDashboard() {
         
         {/* SECTION 1: ACTIVE FLEET REGISTRY PORTAL LOGISTICS */}
         <div className="bg-slate-900/40 border border-slate-900 rounded-2xl p-4 shadow-2xl space-y-3">
-          <h2 className="text-xs font-mono font-black tracking-widest text-slate-200 uppercase">Active Vessel Routing Directory</h2>
+          <h2 className="text-xs font-mono font-black tracking-widest text-slate-200 uppercase">Active Deployed Vessels</h2>
           
           {vessels.length === 0 ? (
             <p className="text-[11px] font-mono text-slate-500 uppercase">No active vessel nodes found in system database registry.</p>
@@ -177,11 +187,11 @@ export default function AdminDashboard() {
                 <div key={vessel.id} className="bg-slate-950/80 border border-slate-900 p-3 rounded-xl flex flex-col justify-between items-center space-y-3 font-mono text-xs">
                   <div className="text-center">
                     <span className="text-white font-black text-[13px] block">{vessel.id}</span>
-                    <span className="text-[9px] text-slate-400 block truncate max-w-[120px] mt-0.5">Token: {vessel.secureToken || 'None'}</span>
+                    <span className="text-[9px] text-slate-400 block truncate mt-0.5">Matrix Enabled</span>
                   </div>
                   
                   <button
-                    onClick={() => handleCopyCheckinLink(vessel)}
+                    onClick={() => handleCopyRandomizedCheckinLink(vessel)}
                     className={`w-full text-center font-bold text-[10px] py-1.5 px-2 rounded-lg uppercase tracking-wider transition-all shadow ${
                       copiedVesselId === vessel.id 
                         ? 'bg-emerald-600 text-white' 
