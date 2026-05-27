@@ -7,12 +7,16 @@ import Link from 'next/link';
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const [vessels, setVessels] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // ROLE GATEKEEPING STATES
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
+
+  // COPIED STATE ALERT EFFECT
+  const [copiedVesselId, setCopiedVesselId] = useState('');
 
   // CONTROL MODAL INTERFACE STATES
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -30,7 +34,6 @@ export default function AdminDashboard() {
     const auth = getAuth();
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        // No session active - bounce immediately
         router.push('/');
       } else {
         const usersCollection = collection(db, 'users');
@@ -41,7 +44,6 @@ export default function AdminDashboard() {
             setIsAuthorized(true);
             setCheckingAccess(false);
           } else {
-            // Not an admin account - eject to home frame
             router.push('/');
           }
         }).catch((err) => {
@@ -54,17 +56,28 @@ export default function AdminDashboard() {
     return () => unsubscribeAuth();
   }, [router]);
 
-  // 2. STREAM ALL INCOMING TELEMETRY CHANNELS
+  // 2. STREAM ACTIVE REGISTRIES AND TELEMETRY CHANNELS
   useEffect(() => {
     if (!isAuthorized) return;
 
+    // Stream Active Vessels
+    const mCollection = collection(db, 'voyagerMissions');
+    const unsubscribeVessels = onSnapshot(mCollection, (snapshot) => {
+      const fetchedVessels: any[] = [];
+      snapshot.forEach((doc) => {
+        fetchedVessels.push({ id: doc.id, ...doc.data() });
+      });
+      fetchedVessels.sort((a, b) => a.id.localeCompare(b.id));
+      setVessels(fetchedVessels);
+    });
+
+    // Stream Check-in Logs
     const logsCollection = collection(db, 'telemetryLogs');
     const unsubscribeLogs = onSnapshot(logsCollection, (snapshot) => {
       const fetchedLogs: any[] = [];
       snapshot.forEach((doc) => {
         fetchedLogs.push({ id: doc.id, ...doc.data() });
       });
-      // Sort newest transmissions first
       fetchedLogs.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
       setLogs(fetchedLogs);
       setLoading(false);
@@ -73,10 +86,24 @@ export default function AdminDashboard() {
       setLoading(false);
     });
 
-    return () => unsubscribeLogs();
+    return () => { unsubscribeVessels(); unsubscribeLogs(); };
   }, [isAuthorized]);
 
-  // LAUNCH CONTROL SUITE MODAL WITH STAGE DATA
+  // TACTICAL CLIPBOARD COPY FLOW WITH TOKEN FALLBACK
+  const handleCopyCheckinLink = (vessel: any) => {
+    const vesselIdLower = vessel.id.toLowerCase();
+    
+    // Fallback securely if a token hasn't been generated in the DB yet
+    const targetToken = vessel.secureToken || 'UnassignedTokenKey';
+    const cleanOrigin = window.location.origin;
+    const directCheckinUrl = `${cleanOrigin}/mission/${vesselIdLower}/checkin?token=${targetToken}`;
+    
+    navigator.clipboard.writeText(directCheckinUrl).then(() => {
+      setCopiedVesselId(vessel.id);
+      setTimeout(() => setCopiedVesselId(''), 2000);
+    }).catch(err => console.error("Clipboard routing fault:", err));
+  };
+
   const openCorrectionModal = (log: any) => {
     setSelectedLogId(log.id);
     setEditVoyagerId(log.voyagerId || '');
@@ -88,7 +115,6 @@ export default function AdminDashboard() {
     setIsEditModalOpen(true);
   };
 
-  // COMMIT MODIFIED DATA VECTOR BACK TO FIREBASE
   const handleSaveTelemetryCorrection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLogId) return;
@@ -104,11 +130,9 @@ export default function AdminDashboard() {
         longitude: editLongitude.trim(),
         verified: editIsVerified
       });
-
       setIsEditModalOpen(false);
     } catch (err) {
-      console.error("Failed to commit telemetry change card:", err);
-      alert('Mainframe rejected telemetry override modification.');
+      console.error("Failed to commit telemetry update:", err);
     } finally {
       setSavingAction(false);
     }
@@ -127,7 +151,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-6 flex flex-col h-screen overflow-hidden">
       
-      {/* TERMINAL NAVIGATION BAR */}
+      {/* HEADER CONTROL BLOCK */}
       <header className="pb-4 border-b border-slate-900 flex justify-between items-center shrink-0">
         <div>
           <h1 className="text-xl font-black tracking-widest uppercase text-slate-100">COMMAND CONTROL CENTER</h1>
@@ -138,18 +162,51 @@ export default function AdminDashboard() {
         </Link>
       </header>
 
-      {/* CORE LOG ENGINE AREA */}
-      <main className="flex-1 overflow-hidden flex flex-col mt-4">
-        <div className="bg-slate-900/40 border border-slate-900 rounded-2xl flex flex-col h-full overflow-hidden shadow-2xl">
-          <div className="p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur shrink-0">
+      {/* ADMIN CONTROL RUNTIME INTERFACE */}
+      <main className="flex-1 overflow-y-auto space-y-6 mt-4 pr-1">
+        
+        {/* SECTION 1: ACTIVE FLEET REGISTRY PORTAL LOGISTICS */}
+        <div className="bg-slate-900/40 border border-slate-900 rounded-2xl p-4 shadow-2xl space-y-3">
+          <h2 className="text-xs font-mono font-black tracking-widest text-slate-200 uppercase">Active Vessel Routing Directory</h2>
+          
+          {vessels.length === 0 ? (
+            <p className="text-[11px] font-mono text-slate-500 uppercase">No active vessel nodes found in system database registry.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {vessels.map((vessel) => (
+                <div key={vessel.id} className="bg-slate-950/80 border border-slate-900 p-3 rounded-xl flex flex-col justify-between items-center space-y-3 font-mono text-xs">
+                  <div className="text-center">
+                    <span className="text-white font-black text-[13px] block">{vessel.id}</span>
+                    <span className="text-[9px] text-slate-400 block truncate max-w-[120px] mt-0.5">Token: {vessel.secureToken || 'None'}</span>
+                  </div>
+                  
+                  <button
+                    onClick={() => handleCopyCheckinLink(vessel)}
+                    className={`w-full text-center font-bold text-[10px] py-1.5 px-2 rounded-lg uppercase tracking-wider transition-all shadow ${
+                      copiedVesselId === vessel.id 
+                        ? 'bg-emerald-600 text-white' 
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {copiedVesselId === vessel.id ? '✓ Link Copied' : 'Copy Link'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 2: TRANSFERRED TELEMETRY LOG FEEDS */}
+        <div className="bg-slate-900/40 border border-slate-900 rounded-2xl flex flex-col shadow-2xl">
+          <div className="p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur">
             <h2 className="text-xs font-mono font-black tracking-widest text-slate-200 uppercase">Incoming Fleet Telemetry Stream Logs</h2>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="p-4 max-h-[500px] overflow-y-auto">
             {loading ? (
-              <div className="text-center py-12 font-mono text-xs text-slate-500 animate-pulse">SYNCHRONIZING SECURE STREAM FEEDS...</div>
+              <div className="text-center py-6 font-mono text-xs text-slate-500 animate-pulse">SYNCHRONIZING FEED LAYERS...</div>
             ) : logs.length === 0 ? (
-              <div className="text-center py-12 font-mono text-xs text-slate-500 uppercase tracking-widest">No Telemetry Stream Transfers Registered In Grid.</div>
+              <div className="text-center py-6 font-mono text-xs text-slate-500 uppercase tracking-widest">No Telemetry streams captured in cloud nodes yet.</div>
             ) : (
               <div className="space-y-3">
                 {logs.map((log) => (
@@ -162,7 +219,7 @@ export default function AdminDashboard() {
                           📍 {log.reportedLocation || 'UNRESOLVED'}
                         </span>
                         {log.verified && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-950/80 text-emerald-400 border border-emerald-900/40 tracking-widest animate-pulse">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-950/80 text-emerald-400 border border-emerald-900/40 tracking-widest">
                             ✓ Verified
                           </span>
                         )}
@@ -226,7 +283,6 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* TACTICAL VERIFICATION STATUS FLAG TOGGLE */}
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between mt-2">
                 <div className="space-y-0.5">
                   <span className="text-[10px] font-black tracking-wide uppercase text-slate-100">VERIFIED HANDLER CHECK-IN</span>
