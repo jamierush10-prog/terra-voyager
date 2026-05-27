@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { db, storage } from '../firebase/config';
 import { collection, onSnapshot, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
@@ -344,18 +344,16 @@ export default function Home() {
                       <span className={`w-2 h-2 rounded-full block animate-pulse ${isItemMissing ? 'bg-yellow-400' : 'bg-cyan-400'}`}></span>
                     </Link>
                   ) : isAdmin ? (
-                    // INTERACTIVE STAGED BUTTON IF ACTIVE HANDLER IDENTIFIER EQUALS ADMIN
                     <button 
                       key={id}
                       onClick={() => { setLaunchError(''); setLaunchVoyagerId(id); setIsLaunchModalOpen(true); }}
-                      className="bg-slate-900/40 border border-slate-800 border-dashed hover:border-emerald-500 hover:bg-emerald-950/20 rounded-xl p-3 text-center flex flex-col items-center justify-center space-y-1 group transition-all cursor-pointer opacity-60 hover:opacity-100"
+                      className="bg-slate-900/40 border border-slate-800 border-dashed hover:border-emerald-500 hover:bg-emerald-950/20 rounded-xl p-3 text-center flex flex-col items-center justify-center space-y-1 group transition-all cursor-pointer opacity-60 hover:opacity-100 font-mono"
                     >
-                      <span className="text-[12px] font-mono font-bold text-slate-400 group-hover:text-emerald-400 tracking-wider">{id}</span>
-                      <span className="text-[9px] font-mono font-black text-emerald-500 uppercase tracking-normal hidden group-hover:block">[LAUNCH]</span>
+                      <span className="text-[12px] font-bold text-slate-400 group-hover:text-emerald-400 tracking-wider">{id}</span>
+                      <span className="text-[9px] font-black text-emerald-500 uppercase tracking-normal hidden group-hover:block">[LAUNCH]</span>
                       <span className="w-1.5 h-1.5 rounded-full bg-slate-800 border border-slate-700 block group-hover:hidden"></span>
                     </button>
                   ) : (
-                    // MUTED UNLAUNCHED LOCKED VIEWER NODE CARD FOR BASIC CONTROLLERS
                     <div 
                       key={id}
                       className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 text-center flex flex-col items-center justify-center space-y-1 opacity-[0.15] select-none"
@@ -465,4 +463,4 @@ export default function Home() {
       )}
     </div>
   );
-}// System Patch Matrix: Resetting telemetry paths
+}
