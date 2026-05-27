@@ -43,7 +43,7 @@ export default function AdminDashboard() {
     // 1. Live stream every launched Voyager record book
     const mCollection = collection(db, 'voyagerMissions');
     const unsubscribeMissions = onSnapshot(mCollection, (snapshot) => {
-      const missions = [];
+      const missions: any[] = [];
       snapshot.forEach((doc) => {
         missions.push({ id: doc.id, ...doc.data() });
       });
