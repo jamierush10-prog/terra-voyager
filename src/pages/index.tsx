@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { db } from '../firebase/config';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import Link from 'next/link';
 
 export default function Home() {
@@ -11,10 +11,19 @@ export default function Home() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
 
-  // FIXED AUTH STATE TYPE BYPASS FOR VERCEL
+  // AUTH STATE VARIABLES
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  // MODAL LOGIC STATES
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authUsername, setAuthUsername] = useState('');
+  const [authActionLoading, setAuthActionLoading] = useState(false);
+  const [authActionError, setAuthActionError] = useState('');
 
   useEffect(() => {
     const auth = getAuth();
@@ -64,6 +73,55 @@ export default function Home() {
       setSearchError('Transmission fault occurred while querying vessel database.');
     } finally {
       setSearching(false);
+    }
+  };
+
+  const handleAuthAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword.trim()) return;
+    if (isSignUpMode && !authUsername.trim()) return;
+
+    setAuthActionLoading(true);
+    setAuthActionError('');
+    const auth = getAuth();
+
+    try {
+      if (isSignUpMode) {
+        // CREATE NEW USER KEY
+        const credential = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        const user = credential.user;
+
+        const newProfile = {
+          uid: user.uid,
+          email: user.email,
+          username: authUsername.trim(),
+          role: 'user'
+        };
+
+        // WRITE ACCESS DATA CARD TO CLOUD FIRESTORE
+        await setDoc(doc(db, 'users', user.uid), newProfile);
+        setUserProfile(newProfile);
+      } else {
+        // AUTHENTICATE RETURNING HANDLER
+        await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+      }
+      
+      // CLOSE INPUT MODAL ON SUCCESSFUL SELECTION
+      setIsAuthModalOpen(false);
+      setAuthEmail('');
+      setAuthPassword('');
+      setAuthUsername('');
+    } catch (err: any) {
+      console.error("Authentication action failure:", err);
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        setAuthActionError('Invalid entry credentials. Verify keys.');
+      } else if (err.code === 'auth/email-already-in-use') {
+        setAuthActionError('This access email identifier is already registered.');
+      } else {
+        setAuthActionError('Authentication clearance rejected by mainframe.');
+      }
+    } finally {
+      setAuthActionLoading(false);
     }
   };
 
@@ -122,21 +180,115 @@ export default function Home() {
                     [Command Console]
                   </Link>
                 )}
-                <Link href="/api/auth/signout" className="text-slate-300 hover:underline font-bold">
+                <button onClick={() => getAuth().signOut()} className="text-slate-300 hover:underline font-bold bg-transparent border-0 cursor-pointer">
                   [Disconnect Uplink]
-                </Link>
+                </button>
               </div>
             </div>
           ) : (
             <p className="text-slate-300 font-bold tracking-wide">
               FIELD HANDLER?{' '}
-              <Link href="/login" className="text-blue-400 hover:underline font-black">
+              <button 
+                onClick={() => { setIsSignUpMode(false); setAuthActionError(''); setIsAuthModalOpen(true); }} 
+                className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0"
+              >
                 [LOGIN // ENLIST ACCESS KEY]
-              </Link>
+              </button>
             </p>
           )}
         </div>
       </main>
+
+      {/* SECURE IDENTITY CLEARANCE MODAL OVERLAY */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-2xl relative font-mono text-xs">
+            
+            <header className="text-center space-y-1.5">
+              <h2 className="text-sm font-black tracking-widest text-slate-100 uppercase">
+                {isSignUpMode ? 'ENLIST NEW CONTROLLER KEY' : 'SECURE IDENTITY LOCK'}
+              </h2>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider">
+                {isSignUpMode ? 'Register handler signature to grid' : 'Enter clearance coordinates'}
+              </p>
+            </header>
+
+            <form onSubmit={handleAuthAction} className="space-y-4">
+              {isSignUpMode && (
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase block tracking-wider">CHOOSE CALLSIGN / USERNAME</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. ALPHA_CHIEF"
+                    value={authUsername}
+                    onChange={(e) => setAuthUsername(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 focus:outline-none focus:border-blue-500 uppercase font-bold"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-bold text-slate-300 uppercase block tracking-wider">EMAIL VECTOR IDENTIFIER</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="name@domain.com"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-bold text-slate-300 uppercase block tracking-wider">SECURE ACCESS PASSPHRASE</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {authActionError && (
+                <p className="text-rose-400 text-[10px] text-center uppercase tracking-wide bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">
+                  ⚠️ {authActionError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={authActionLoading}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all disabled:opacity-50"
+              >
+                {authActionLoading ? 'PROCESSING MATRIX...' : isSignUpMode ? 'GENERATE ACCESS CARD' : 'VERIFY IDENTITY CRITERIA'}
+              </button>
+            </form>
+
+            <div className="border-t border-slate-800 pt-4 flex flex-col space-y-3 text-[10px] text-center">
+              <button
+                type="button"
+                onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthActionError(''); }}
+                className="text-blue-400 hover:underline uppercase bg-transparent border-0 cursor-pointer font-bold"
+              >
+                {isSignUpMode ? '[Switch to Returning Log In]' : '[Request New Handler Enlistment]'}
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200 uppercase bg-transparent border-0 cursor-pointer tracking-wider text-[9px]"
+              >
+                [Cancel Clearance Request]
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
