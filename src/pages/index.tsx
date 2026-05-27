@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { db } from '../firebase/config';
+import { db, storage } from '../firebase/config';
 import { collection, onSnapshot, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
@@ -22,7 +23,7 @@ export default function Home() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // SECURITY PORTAL MODAL STATES
+  // SECURITY PORTAL SIGN-IN MODAL STATES
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
@@ -30,6 +31,17 @@ export default function Home() {
   const [authUsername, setAuthUsername] = useState('');
   const [authActionLoading, setAuthActionLoading] = useState(false);
   const [authActionError, setAuthActionError] = useState('');
+
+  // --- NEW VESSEL CLICK-TO-LAUNCH MODAL STATES ---
+  const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false);
+  const [launchVoyagerId, setLaunchVoyagerId] = useState('');
+  const [launchOriginCity, setLaunchOriginCity] = useState('');
+  const [launchDestinationCity, setLaunchDestinationCity] = useState('');
+  const [launchLatitude, setLaunchLatitude] = useState('');
+  const [launchLongitude, setLaunchLongitude] = useState('');
+  const [launchImageFile, setLaunchImageFile] = useState<File | null>(null);
+  const [launchingAction, setLaunchingAction] = useState(false);
+  const [launchError, setLaunchError] = useState('');
 
   // 1. LISTEN TO REGISTRY MISSIONS
   useEffect(() => {
@@ -141,12 +153,71 @@ export default function Home() {
     }
   };
 
-  // INTERSECT REGISTRIES WITH FIELD TELEMETRY TO BUILD COMPREHENSIVE LAST-KNOWN MAP MARKERS
-  const mappedFleetPins = Object.keys(activeVessels).map((vesselId) => {
-    const baselineRegistryData = activeVessels[vesselId];
+  // --- SUBMIT CORE CLICK-TO-LAUNCH SEQUENCER ---
+  const handleLaunchNewVessel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetVesselId = launchVoyagerId.trim().toUpperCase();
     
+    if (!targetVesselId || !launchOriginCity.trim() || !launchDestinationCity.trim() || !launchLatitude.trim() || !launchLongitude.trim()) return;
+
+    setLaunchingAction(true);
+    setLaunchError('');
+    let uploadedImageUrl = '';
+
+    try {
+      if (launchImageFile) {
+        const storageRef = ref(storage, `launches/${targetVesselId}_${Date.now()}_${launchImageFile.name}`);
+        const uploadSnapshot = await uploadBytes(storageRef, launchImageFile);
+        uploadedImageUrl = await getDownloadURL(uploadSnapshot.ref);
+      }
+
+      const launchTimestampIso = new Date().toISOString();
+
+      // 1. Write the core registry profile to voyagerMissions
+      await setDoc(doc(db, 'voyagerMissions', targetVesselId), {
+        missionId: targetVesselId,
+        originCity: launchOriginCity.trim(),
+        destinationCity: launchDestinationCity.trim(),
+        latitude: launchLatitude.trim(),
+        longitude: launchLongitude.trim(),
+        launchImageUrl: uploadedImageUrl,
+        launchDate: launchTimestampIso
+      });
+
+      // 2. Simultaneously seed telemetryLogs so it pins immediately on index layout
+      const initialSeedLogRef = doc(collection(db, 'telemetryLogs'));
+      await setDoc(initialSeedLogRef, {
+        voyagerId: targetVesselId,
+        handlerName: 'SYSTEM CONSOLE',
+        reportedLocation: `DEPLOYMENT VECTOR: ${launchOriginCity.trim().toUpperCase()}`,
+        latitude: launchLatitude.trim(),
+        longitude: launchLongitude.trim(),
+        imageUrl: uploadedImageUrl,
+        timestamp: new Date(),
+        verified: true,
+        isLaunchPad: true
+      });
+
+      // Collapse overlay matrix
+      setLaunchVoyagerId('');
+      setLaunchOriginCity('');
+      setLaunchDestinationCity('');
+      setLaunchLatitude('');
+      setLaunchLongitude('');
+      setLaunchImageFile(null);
+      setIsLaunchModalOpen(false);
+    } catch (err: any) {
+      console.error("Vessel click provisioning error:", err);
+      setLaunchError('Database verification write fault occurred.');
+    } finally {
+      setLaunchingAction(false);
+    }
+  };
+
+  const activeMapMarkers = Object.values(activeVessels).map((baselineRegistryData) => {
+    const vesselId = baselineRegistryData.missionId || baselineRegistryData.id;
     const vesselLogs = telemetryLogs
-      .filter(log => log.voyagerId && log.voyagerId.toUpperCase() === vesselId)
+      .filter(log => log.voyagerId && log.voyagerId.toUpperCase() === vesselId.toUpperCase())
       .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
     let currentLat = parseFloat(baselineRegistryData.latitude);
@@ -167,14 +238,10 @@ export default function Home() {
       }
     }
 
-    return {
-      vesselId,
-      lat: currentLat,
-      lng: currentLng,
-      locationLabel,
-      operatorSignoff
-    };
+    return { vesselId, lat: currentLat, lng: currentLng, locationLabel, operatorSignoff };
   }).filter(pin => !isNaN(pin.lat) && !isNaN(pin.lng));
+
+  const isAdmin = userProfile?.role === 'admin';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
@@ -193,7 +260,7 @@ export default function Home() {
           ) : currentUser && userProfile ? (
             <div className="flex items-center space-x-4">
               <span className="text-white font-bold">📡 CALLSIGN: <span className="text-blue-400 font-black">{userProfile.username}</span></span>
-              {userProfile.role === 'admin' && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[CONSOLE]</Link>}
+              {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[CONSOLE]</Link>}
               <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[DISCONNECT]</button>
             </div>
           ) : (
@@ -211,7 +278,7 @@ export default function Home() {
         <section className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative shrink-0">
           <MapContainer center={[37.0902, -95.7129]} zoom={4} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-            {mappedFleetPins.map((pin) => (
+            {activeMapMarkers.map((pin) => (
               <Marker key={pin.vesselId} position={[pin.lat, pin.lng]}>
                 <Popup>
                   <div className="text-slate-900 font-mono text-xs font-bold p-1">
@@ -246,11 +313,9 @@ export default function Home() {
                   const baselineRegistryData = activeVessels[id];
                   const isDeployed = !!baselineRegistryData;
 
-                  // DETERMINE INDIVIDUAL VESSEL LOOP STATUS WITHIN ARRAY
                   const isItemMissing = (() => {
                     if (!isDeployed) return false;
                     const currentTimeMs = new Date().getTime();
-                    
                     const vesselLogs = telemetryLogs
                       .filter(log => log.voyagerId && log.voyagerId.toUpperCase() === id)
                       .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
@@ -266,7 +331,6 @@ export default function Home() {
                   })();
 
                   return isDeployed ? (
-                    // ACTIVE VESSEL MODULE CARD
                     <Link 
                       key={id}
                       href={`/mission/${id.toLowerCase()}`}
@@ -279,8 +343,19 @@ export default function Home() {
                       <span className="text-[13px] font-mono font-black text-white tracking-wider">{id}</span>
                       <span className={`w-2 h-2 rounded-full block animate-pulse ${isItemMissing ? 'bg-yellow-400' : 'bg-cyan-400'}`}></span>
                     </Link>
+                  ) : isAdmin ? (
+                    // INTERACTIVE STAGED BUTTON IF ACTIVE HANDLER IDENTIFIER EQUALS ADMIN
+                    <button 
+                      key={id}
+                      onClick={() => { setLaunchError(''); setLaunchVoyagerId(id); setIsLaunchModalOpen(true); }}
+                      className="bg-slate-900/40 border border-slate-800 border-dashed hover:border-emerald-500 hover:bg-emerald-950/20 rounded-xl p-3 text-center flex flex-col items-center justify-center space-y-1 group transition-all cursor-pointer opacity-60 hover:opacity-100"
+                    >
+                      <span className="text-[12px] font-mono font-bold text-slate-400 group-hover:text-emerald-400 tracking-wider">{id}</span>
+                      <span className="text-[9px] font-mono font-black text-emerald-500 uppercase tracking-normal hidden group-hover:block">[LAUNCH]</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-800 border border-slate-700 block group-hover:hidden"></span>
+                    </button>
                   ) : (
-                    // MUTED UNLAUNCHED STAGED MODULE CARD
+                    // MUTED UNLAUNCHED LOCKED VIEWER NODE CARD FOR BASIC CONTROLLERS
                     <div 
                       key={id}
                       className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 text-center flex flex-col items-center justify-center space-y-1 opacity-[0.15] select-none"
@@ -296,7 +371,64 @@ export default function Home() {
         </section>
       </main>
 
-      {/* SECURITY ACCESS IDENTITY MODAL */}
+      {/* --- MODAL 1: INTERACTIVE CLICK-TO-LAUNCH TELEMETRY SEEDER --- */}
+      {isLaunchModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-2xl relative font-mono text-xs text-slate-100">
+            <header className="text-center space-y-1">
+              <h3 className="text-sm font-black tracking-widest uppercase text-white">PROVISION & LAUNCH CONTAINER</h3>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider">Initialize Fleet Module Baseline Coordinates</p>
+            </header>
+
+            <form onSubmit={handleLaunchNewVessel} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-300 uppercase">VESSEL TARGET ID IDENTIFIER</label>
+                <input type="text" readOnly value={launchVoyagerId} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-blue-400 focus:outline-none font-black uppercase tracking-wider" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">ORIGIN LOCATION</label>
+                  <input type="text" required placeholder="e.g. DAPHNE, AL" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">DESTINATION TARGET</label>
+                  <input type="text" required placeholder="e.g. BOSTON, MA" value={launchDestinationCity} onChange={(e) => setLaunchDestinationCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LATITUDE (X)</label>
+                  <input type="text" required placeholder="e.g. 30.6035" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LONGITUDE (Y)</label>
+                  <input type="text" required placeholder="e.g. -87.9011" value={launchLongitude} onChange={(e) => setLaunchLongitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-300 uppercase">ATTACH LAUNCH PROFILE IMAGE</label>
+                <input type="file" accept="image/*" onChange={(e) => setLaunchImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
+              </div>
+
+              {launchError && <p className="text-rose-400 text-[10px] text-center uppercase bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {launchError}</p>}
+
+              <div className="pt-2 flex flex-col space-y-2">
+                <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-widest py-3 px-4 rounded-xl transition-all disabled:opacity-50">
+                  {launchingAction ? 'COMMITTING PROFILE TO CLOUD...' : 'INITIALIZE DEPLOYMENT PATH'}
+                </button>
+                <button type="button" onClick={() => setIsLaunchModalOpen(false)} className="w-full bg-transparent text-slate-400 hover:text-slate-200 uppercase tracking-wider py-1 font-bold text-[10px]">
+                  [Abort Provisioning Request]
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SECURITY USER ACCOUNT SIGN-IN MODAL */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-2xl relative font-mono text-xs text-slate-100">
