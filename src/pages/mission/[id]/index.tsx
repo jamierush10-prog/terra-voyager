@@ -128,7 +128,6 @@ export default function VesselControl() {
         const data = doc.data();
         if (data.voyagerId && data.voyagerId.toUpperCase() === voyagerId) fetchedLogs.push({ id: doc.id, ...data });
       });
-      // Chronological order (oldest to newest)
       fetchedLogs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
       setLogs(fetchedLogs);
       setLoading(false);
@@ -163,8 +162,6 @@ export default function VesselControl() {
   }
 
   logs.forEach((log, idx) => {
-    // BLUE STAR LOGIC: A log gets verified if there is a LATER log that is approved/verified.
-    // This proves they successfully handed it off to the next person!
     let isLogHandedOffAndVerified = false;
     for (let i = idx + 1; i < logs.length; i++) {
       if (logs[i].verified === true) {
@@ -235,7 +232,6 @@ export default function VesselControl() {
   const isCenterValid = currentMapCenter && !isNaN(currentMapCenter[0]) && !isNaN(currentMapCenter[1]);
   const newestFirstLedgerDisplayList = [...unifiedWaypointTimeline].reverse();
 
-  // Helper function to check if a user is in our local list of verified handoff stars
   const checkUsernameHasStarInTimeline = (name: string) => {
     if (!name) return false;
     return logs.some((log, idx) => {
@@ -255,11 +251,22 @@ export default function VesselControl() {
       <header className="p-4 border-b border-slate-900 bg-slate-900/60 backdrop-blur shrink-0 z-50">
         <div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
           <div className="space-y-1.5 w-full xl:w-auto">
-            {fromCheckin === 'true' && (
-              <Link href={`/mission/${voyagerId.toLowerCase()}/checkin`} className="inline-block text-xs font-mono uppercase font-bold text-blue-400 tracking-widest hover:underline mb-1">
-                ← Return to Field Portal
+            
+            {/* BREADCRUMB HOME MENU ROUTING LINK */}
+            <div className="flex items-center space-x-3 mb-1">
+              <Link href="/" className="inline-flex items-center text-xs font-mono uppercase font-black text-slate-400 hover:text-blue-400 tracking-widest transition-all">
+                🌍 FLEET PORTAL
               </Link>
-            )}
+              {fromCheckin === 'true' && (
+                <>
+                  <span className="text-slate-700 font-mono text-xs">/</span>
+                  <Link href={`/mission/${voyagerId.toLowerCase()}/checkin`} className="inline-block text-xs font-mono uppercase font-bold text-blue-400 tracking-widest hover:underline">
+                    ← Field Portal
+                  </Link>
+                </>
+              )}
+            </div>
+
             <div className="flex justify-between items-center w-full">
               <div className="flex flex-col">
                 <span className="text-xs font-mono font-bold tracking-widest text-slate-400 uppercase">VESSEL</span>
@@ -284,10 +291,10 @@ export default function VesselControl() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full xl:w-auto font-mono text-left">
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">T-MET (SINCE LAUNCH)</span><span className="text-sm font-black text-blue-400 tracking-widest">{timeSinceLaunch}</span></div>
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">TSLC (SINCE CHECKIN)</span><span className="text-sm font-black text-emerald-400 tracking-widest">{timeSinceCheckin}</span></div>
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">DISPLACEMENT</span><span className="text-base font-black text-amber-500">{milesFromLaunch.toLocaleString()} MI</span></div>
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">TOTAL TRAVELED</span><span className="text-base font-black text-cyan-400">{totalMilesTraveled.toLocaleString()} MI</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900><span className="text-[10px] text-slate-200 block font-bold uppercase">T-MET (SINCE LAUNCH)</span><span className="text-sm font-black text-blue-400 tracking-widest">{timeSinceLaunch}</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900><span className="text-[10px] text-slate-200 block font-bold uppercase">TSLC (SINCE CHECKIN)</span><span className="text-sm font-black text-emerald-400 tracking-widest">{timeSinceCheckin}</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900><span className="text-[10px] text-slate-200 block font-bold uppercase">DISPLACEMENT</span><span className="text-base font-black text-amber-500">{milesFromLaunch.toLocaleString()} MI</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900><span className="text-[10px] text-slate-200 block font-bold uppercase">TOTAL TRAVELED</span><span className="text-base font-black text-cyan-400">{totalMilesTraveled.toLocaleString()} MI</span></div>
           </div>
         </div>
       </header>
@@ -337,7 +344,6 @@ export default function VesselControl() {
                         <span className="text-slate-100 font-bold">Sign-off:</span>
                         <span className="text-white font-black tracking-wide flex items-center">
                           {log.handlerName}
-                          {/* INJECT BLUE STAR BADGE ON LEDGER */}
                           {log.hasEarnedBlueStar && (
                             <span className="ml-1.5 text-blue-400 text-xs bg-blue-950/80 border border-blue-500/30 px-1 py-0.5 rounded font-black tracking-tighter text-[9px]">
                               🔷 {voyagerId}
@@ -381,7 +387,6 @@ export default function VesselControl() {
                               <div className="flex justify-between items-center border-b border-slate-950/40 pb-1 text-[11px]">
                                 <span className="text-blue-400 font-black flex items-center">
                                   📡 {msg.username}
-                                  {/* INJECT BLUE STAR BADGE ON COMMS DECK FEED */}
                                   {userHasStar && (
                                     <span className="ml-1.5 text-blue-400 text-[8px] bg-blue-950/80 border border-blue-500/30 px-1 py-0.5 rounded font-black tracking-tighter">
                                       🔷 {voyagerId}
