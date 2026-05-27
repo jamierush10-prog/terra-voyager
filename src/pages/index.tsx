@@ -158,11 +158,53 @@ export default function Home() {
     e.preventDefault();
     const targetVesselId = launchVoyagerId.trim().toUpperCase();
     
-    if (!targetVesselId || !launchOriginCity.trim() || !launchDestinationCity.trim() || !launchLatitude.trim() || !launchLongitude.trim()) return;
+    if (!targetVesselId || !launchOriginCity.trim() || !launchDestinationCity.trim()) return;
 
     setLaunchingAction(true);
     setLaunchError('');
+    
+    let finalOriginText = launchOriginCity.trim().toUpperCase();
+    let finalLat = launchLatitude.trim();
+    let finalLng = launchLongitude.trim();
     let uploadedImageUrl = '';
+
+    // DYNAMIC LAUNCH GEOCODING: IF THE ADMIN PROVISIONED VIA A 5-DIGIT ZIP CODE
+    const isZipCode = /^\d{5}$/.test(launchOriginCity.trim());
+    
+    if (isZipCode) {
+      try {
+        setLaunchError('RESOLVING LAUNCH PAD COORDINATES...');
+        const geoResponse = await fetch(
+          `https://nominatim.openstreetmap.org/search?postalcode=${launchOriginCity.trim()}&country=USA&format=json&addressdetails=1`
+        );
+        const geoData = await geoResponse.json();
+        
+        if (geoData && geoData.length > 0) {
+          const matchNode = geoData[0];
+          finalLat = matchNode.lat;
+          finalLng = matchNode.lon;
+
+          const addr = matchNode.address;
+          const city = addr.city || addr.town || addr.village || addr.hamlet || addr.county || 'UNKNOWN CITY';
+          const state = addr.state ? addr.state.toUpperCase() : 'USA';
+          
+          finalOriginText = `${city.toUpperCase()}, ${state}`;
+        } else {
+          setLaunchingAction(false);
+          setLaunchError('⚠️ SPECIFIED ZIP CODE INVALID OR NOT FOUND.');
+          return;
+        }
+      } catch (err) {
+        console.error("Launch lookup fault:", err);
+      }
+    }
+
+    // Double-check coordinate fields aren't blank if a zip wasn't used or geocode failed
+    if (!finalLat || !finalLng) {
+      setLaunchingAction(false);
+      setLaunchError('⚠️ LATITUDE AND LONGITUDE ARE REQUIRED FOR COORDINATE MAPPING.');
+      return;
+    }
 
     try {
       if (launchImageFile) {
@@ -176,10 +218,10 @@ export default function Home() {
       // 1. Write the core registry profile to voyagerMissions
       await setDoc(doc(db, 'voyagerMissions', targetVesselId), {
         missionId: targetVesselId,
-        originCity: launchOriginCity.trim(),
-        destinationCity: launchDestinationCity.trim(),
-        latitude: launchLatitude.trim(),
-        longitude: launchLongitude.trim(),
+        originCity: finalOriginText,
+        destinationCity: launchDestinationCity.trim().toUpperCase(),
+        latitude: finalLat,
+        longitude: finalLng,
         launchImageUrl: uploadedImageUrl,
         launchDate: launchTimestampIso
       });
@@ -189,9 +231,9 @@ export default function Home() {
       await setDoc(initialSeedLogRef, {
         voyagerId: targetVesselId,
         handlerName: 'SYSTEM CONSOLE',
-        reportedLocation: `DEPLOYMENT VECTOR: ${launchOriginCity.trim().toUpperCase()}`,
-        latitude: launchLatitude.trim(),
-        longitude: launchLongitude.trim(),
+        reportedLocation: `DEPLOYMENT VECTOR: ${finalOriginText}`,
+        latitude: finalLat,
+        longitude: finalLng,
         imageUrl: uploadedImageUrl,
         timestamp: new Date(),
         verified: true,
@@ -386,8 +428,8 @@ export default function Home() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-300 uppercase">ORIGIN LOCATION</label>
-                  <input type="text" required placeholder="e.g. DAPHNE, AL" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" />
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">ORIGIN LOCATION OR ZIP CODE</label>
+                  <input type="text" required placeholder="e.g. 36526 OR DAPHNE, AL" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-slate-300 uppercase">DESTINATION TARGET</label>
@@ -397,12 +439,12 @@ export default function Home() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LATITUDE (X)</label>
-                  <input type="text" required placeholder="e.g. 30.6035" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LATITUDE (LEAVE BLANK IF USING ZIP)</label>
+                  <input type="text" placeholder="e.g. 30.6035" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LONGITUDE (Y)</label>
-                  <input type="text" required placeholder="e.g. -87.9011" value={launchLongitude} onChange={(e) => setLaunchLongitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">INITIAL LONGITUDE (LEAVE BLANK IF USING ZIP)</label>
+                  <input type="text" placeholder="e.g. -87.9011" value={launchLongitude} onChange={(e) => setLaunchLongitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
                 </div>
               </div>
 
