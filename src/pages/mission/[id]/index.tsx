@@ -34,6 +34,7 @@ export default function VesselControl() {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isMapCollapsed, setIsMapCollapsed] = useState(false); // MAP COLLAPSE STATE
 
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -220,32 +221,42 @@ export default function VesselControl() {
 
       <header className="p-4 border-b border-slate-900 bg-slate-900/60 backdrop-blur shrink-0 z-50">
         <div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 w-full xl:w-auto">
             {fromCheckin === 'true' && (
-              <Link href={`/mission/${voyagerId.toLowerCase()}/checkin`} className="inline-block text-[10px] font-mono uppercase font-bold text-blue-500 tracking-widest hover:underline mb-0.5">
+              <Link href={`/mission/${voyagerId.toLowerCase()}/checkin`} className="inline-block text-xs font-mono uppercase font-bold text-blue-400 tracking-widest hover:underline mb-1">
                 ← Return to Field Portal
               </Link>
             )}
-            <div className="flex items-center space-x-3">
-              <h1 className="text-xl font-black tracking-wider text-slate-200 uppercase">VESSEL // {voyagerId}</h1>
-              <span className="px-2 py-0.5 text-[9px] font-mono font-bold tracking-widest uppercase rounded bg-blue-950/60 text-blue-400 border border-blue-900/40">
-                IN TRANSIT
-              </span>
+            <div className="flex justify-between items-center w-full">
+              <div className="flex items-center space-x-3">
+                <h1 className="text-2xl font-black tracking-wider text-slate-100 uppercase">VESSEL // {voyagerId}</h1>
+                <span className="px-2 py-0.5 text-[10px] font-mono font-bold tracking-widest uppercase rounded bg-blue-950/60 text-blue-400 border border-blue-900/40">
+                  IN TRANSIT
+                </span>
+              </div>
+              {/* MOBILE COLLAPSE MAP BUTTON */}
+              <button 
+                onClick={() => setIsMapCollapsed(!isMapCollapsed)} 
+                className="md:hidden bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-800 font-mono text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all"
+              >
+                {isMapCollapsed ? 'Expand Map' : 'Collapse Map'}
+              </button>
             </div>
-            {vesselMeta && <p className="text-[10px] font-mono text-slate-500 uppercase">Routing Node Matrix: {vesselMeta.originCity} → {vesselMeta.destinationCity}</p>}
+            {vesselMeta && <p className="text-xs font-mono text-slate-300 uppercase tracking-wide">Routing Node Matrix: {vesselMeta.originCity} → {vesselMeta.destinationCity}</p>}
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full xl:w-auto font-mono text-left">
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[9px] text-slate-500 block uppercase">T-MET (SINCE LAUNCH)</span><span className="text-xs font-black text-blue-400 tracking-widest">{timeSinceLaunch}</span></div>
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[9px] text-slate-500 block uppercase">TSLC (SINCE CHECKIN)</span><span className="text-xs font-black text-emerald-400 tracking-widest">{timeSinceCheckin}</span></div>
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[9px] text-slate-500 block uppercase">DISPLACEMENT</span><span className="text-sm font-black text-amber-500">{milesFromLaunch.toLocaleString()} MI</span></div>
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[9px] text-slate-500 block uppercase">TOTAL MILES TRAVELED</span><span className="text-sm font-black text-cyan-400">{totalMilesTraveled.toLocaleString()} MI</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">T-MET (SINCE LAUNCH)</span><span className="text-sm font-black text-blue-400 tracking-widest">{timeSinceLaunch}</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">TSLC (SINCE CHECKIN)</span><span className="text-sm font-black text-emerald-400 tracking-widest">{timeSinceCheckin}</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">DISPLACEMENT</span><span className="text-base font-black text-amber-500">{milesFromLaunch.toLocaleString()} MI</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">TOTAL TRAVELED</span><span className="text-base font-black text-cyan-400">{totalMilesTraveled.toLocaleString()} MI</span></div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden max-w-7xl w-full mx-auto relative z-10">
-        <section className="w-full md:w-1/2 h-64 md:h-full border-b md:border-b-0 md:border-r border-slate-900 relative shrink-0">
+        {/* COLLAPSIBLE MAP CONTAINER BOX */}
+        <section className={`w-full md:w-1/2 border-slate-900 relative shrink-0 transition-all duration-300 ease-in-out ${isMapCollapsed ? 'h-0 border-b-0 hidden' : 'h-64 md:h-full border-b md:border-b-0 md:border-r'}`}>
           {isCenterValid ? (
             <MapContainer center={currentMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
               <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
@@ -266,30 +277,30 @@ export default function VesselControl() {
               }
             </MapContainer>
           ) : (
-            <div className="w-full h-full bg-slate-950 flex items-center justify-center font-mono text-xs text-slate-600 animate-pulse">CALIBRATING LOCAL MAP COORDINATES...</div>
+            <div className="w-full h-full bg-slate-950 flex items-center justify-center font-mono text-xs text-slate-400 animate-pulse">CALIBRATING LOCAL MAP COORDINATES...</div>
           )}
         </section>
 
-        <section className="w-full md:w-1/2 flex flex-col h-auto md:h-full overflow-hidden bg-slate-950/20">
+        <section className="flex-1 flex flex-col h-auto md:h-full overflow-hidden bg-slate-950/20">
           <div className="flex border-b border-slate-900 p-4 shrink-0 bg-slate-950">
-            <button onClick={() => setActiveTab('ledger')} className={`flex-1 pb-2 text-xs font-bold tracking-wider uppercase transition-all ${activeTab === 'ledger' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-500'}`}>Vessel Ledger</button>
-            <button onClick={() => setActiveTab('chat')} className={`flex-1 pb-2 text-xs font-bold tracking-wider uppercase transition-all ${activeTab === 'chat' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-500'}`}>Crew Comms</button>
+            <button onClick={() => setActiveTab('ledger')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase transition-all ${activeTab === 'ledger' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Vessel Ledger</button>
+            <button onClick={() => setActiveTab('chat')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase transition-all ${activeTab === 'chat' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Crew Comms</button>
           </div>
 
           <div className="flex-1 flex flex-col overflow-hidden p-4">
             {loading ? (
-              <div className="text-center py-12 text-xs font-mono text-slate-600 animate-pulse">SYNCHRONIZING TELEMETRY STREAM...</div>
+              <div className="text-center py-12 text-xs font-mono text-slate-400 animate-pulse">SYNCHRONIZING TELEMETRY STREAM...</div>
             ) : activeTab === 'ledger' ? (
               <div className="space-y-5 overflow-y-auto flex-1 pr-1">
                 {newestFirstLedgerDisplayList.map((log) => (
                   <div key={log.id} className="p-4 bg-slate-900/50 border border-slate-900 rounded-xl space-y-4 shadow-2xl backdrop-blur-sm">
                     <div className="flex justify-between items-center text-xs font-mono">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-blue-500 font-bold">#{log.displayIndex}</span>
-                        <span className="text-slate-400 font-bold">Sign-off:</span>
-                        <span className="text-slate-200 font-black tracking-wide">{log.handlerName}</span>
+                      <div className="flex items-center space-x-2 text-[13px]">
+                        <span className="text-blue-400 font-black">#{log.displayIndex}</span>
+                        <span className="text-slate-100 font-bold">Sign-off:</span>
+                        <span className="text-white font-black tracking-wide">{log.handlerName}</span>
                       </div>
-                      <span className="bg-slate-950 px-2.5 py-1 rounded-md text-slate-400 border border-slate-900 font-bold uppercase tracking-wide text-[11px]">
+                      <span className="bg-slate-950 px-2.5 py-1 rounded-md text-white border border-slate-800 font-black uppercase tracking-wide text-[12px]">
                         📍 {log.reportedLocation.includes("DEPLOYMENT") ? "ORIGIN BASE" : log.reportedLocation}
                       </span>
                     </div>
@@ -300,14 +311,14 @@ export default function VesselControl() {
                         <img src={log.imageUrl} alt="Verification Asset" className="w-full h-auto max-h-80 object-cover rounded-md mx-auto" />
                       </div>
                     ) : log.isLaunchPad && (
-                      <div className="p-8 text-center text-xs border border-dashed border-slate-900 rounded-xl bg-slate-950/40 text-slate-500 uppercase tracking-widest font-mono">
+                      <div className="p-8 text-center text-xs border border-dashed border-slate-800 rounded-xl bg-slate-950/40 text-slate-100 uppercase tracking-widest font-mono font-bold">
                         📦 Vessel Sealed and Launched Successfully // Stationery In Transit
                       </div>
                     )}
 
-                    <div className="text-[10px] font-mono text-slate-500 uppercase tracking-widest flex justify-between items-center bg-slate-950/40 p-2 rounded-lg border border-slate-900/40">
-                      <span>{log.isLaunchPad ? "Initial Base Setup" : "Verified Field Check-in"}</span>
-                      <span className="text-slate-400 font-semibold tracking-normal">
+                    <div className="text-[11px] font-mono text-slate-200 uppercase tracking-widest flex justify-between items-center bg-slate-950/40 p-2 rounded-lg border border-slate-900/40">
+                      <span className="font-bold">{log.isLaunchPad ? "Initial Base Setup" : "Verified Field Check-in"}</span>
+                      <span className="text-white font-black tracking-normal">
                         ⏰ {formatDisplayDateTime(log.displayDateRaw)}
                       </span>
                     </div>
@@ -320,17 +331,17 @@ export default function VesselControl() {
                   <div className="flex-1 flex flex-col overflow-hidden space-y-4">
                     <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 font-mono text-xs">
                       {chatMessages.length === 0 ? (
-                        <div className="text-center py-12 text-slate-600 uppercase text-[10px]">Secure Channel Established. Begin Comms Broadcast...</div>
+                        <div className="text-center py-12 text-slate-300 uppercase text-[11px] font-bold">Secure Channel Established. Begin Comms Broadcast...</div>
                       ) : (
                         chatMessages.map((msg) => (
                           <div key={msg.id} className="p-2.5 bg-slate-900/40 border border-slate-900/60 rounded-xl space-y-1">
-                            <div className="flex justify-between items-center border-b border-slate-950/40 pb-1 text-[10px]">
+                            <div className="flex justify-between items-center border-b border-slate-950/40 pb-1 text-[11px]">
                               <span className="text-blue-400 font-black">📡 {msg.username}</span>
-                              <span className="text-slate-500 font-semibold">
+                              <span className="text-slate-200 font-bold">
                                 ⏰ {formatDisplayDateTime(msg.timestamp)}
                               </span>
                             </div>
-                            <p className="text-slate-300 break-words pt-0.5">{msg.messageText}</p>
+                            <p className="text-slate-100 break-words pt-0.5 text-[13px] font-bold">{msg.messageText}</p>
                           </div>
                         ))
                       )}
@@ -338,20 +349,20 @@ export default function VesselControl() {
 
                     {hasVerifiedCheckinAccess ? (
                       <form onSubmit={handleSendCommsMessage} className="border-t border-slate-900 pt-3 flex items-center space-x-2 shrink-0 bg-slate-950/40">
-                        <input type="text" placeholder={`Transmit as ${userProfile.username}...`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500" />
+                        <input type="text" placeholder={`Transmit as ${userProfile.username}...`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-100 focus:outline-none focus:border-blue-500 font-bold" />
                         <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-xs font-bold uppercase py-3 px-5 rounded-xl transition-all shadow">Send</button>
                       </form>
                     ) : (
-                      <div className="border-t border-slate-900 pt-3 bg-slate-950/40 p-4 rounded-xl text-center font-mono text-[10px] text-rose-500/90 bg-rose-950/10 border border-rose-950/30 uppercase tracking-wider">
+                      <div className="border-t border-slate-900 pt-3 bg-slate-950/40 p-4 rounded-xl text-center font-mono text-[11px] text-rose-400 bg-rose-950/20 border border-rose-950/30 uppercase tracking-wider font-bold">
                         🔒 TRANSMISSION MUTED // RECEIVE ONLY
-                        <p className="text-[9px] text-slate-500 tracking-normal lowercase mt-1">You must physically handle and check in vessel {voyagerId} to unlock its communication uplink channel.</p>
+                        <p className="text-[10px] text-slate-300 tracking-normal lowercase mt-1 font-normal">You must physically handle and check in vessel {voyagerId} to unlock its communication uplink channel.</p>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="text-center py-12 font-mono text-xs text-slate-500">
+                  <div className="text-center py-12 font-mono text-xs text-slate-200 font-bold">
                     COMMS CHANNEL RECEPTION ONLY // SECURE OVERRIDE STAGED
-                    <p className="text-[10px] text-slate-600 mt-2 lowercase">enlist via field portal to authorize communication transmission keys.</p>
+                    <p className="text-[11px] text-slate-400 mt-2 lowercase font-normal">enlist via field portal to authorize communication transmission keys.</p>
                   </div>
                 )}
               </div>
