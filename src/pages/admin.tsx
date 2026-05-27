@@ -1,136 +1,259 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { db } from '../firebase/config';
-import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, query, where, getDocs } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import Link from 'next/link';
 
 export default function AdminDashboard() {
-  const [deployedMissions, setDeployedMissions] = useState<any[]>([]);
-  const [incomingLogs, setIncomingLogs] = useState<any[]>([]);
+  const router = useRouter();
+  const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // ROLE GATEKEEPING STATES
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
+  // CONTROL MODAL INTERFACE STATES
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedLogId, setSelectedLogId] = useState('');
+  const [editVoyagerId, setEditVoyagerId] = useState('');
+  const [editHandlerName, setEditHandlerName] = useState('');
+  const [editReportedLocation, setEditReportedLocation] = useState('');
+  const [editLatitude, setEditLatitude] = useState('');
+  const [editLongitude, setEditLongitude] = useState('');
+  const [editIsVerified, setEditIsVerified] = useState(false);
+  const [savingAction, setSavingAction] = useState(false);
+
+  // 1. ENFORCE STRICT ADMIN ROLE GATEWAY HANDSHAKE
   useEffect(() => {
-    // 1. Live stream every active traveling mission tracker
-    const mCollection = collection(db, 'voyagerMissions');
-    const unsubscribeMissions = onSnapshot(mCollection, (snapshot) => {
-      const missions: any[] = [];
-      snapshot.forEach((doc) => {
-        missions.push({ id: doc.id, ...doc.data() });
-      });
-      // Sort newest launches to the top
-      missions.sort((a, b) => new Date(b.launchDate).getTime() - new Date(a.launchDate).getTime());
-      setDeployedMissions(missions);
+    const auth = getAuth();
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        // No session active - bounce immediately
+        router.push('/');
+      } else {
+        const usersCollection = collection(db, 'users');
+        const qProfile = query(usersCollection, where('uid', '==', user.uid));
+        
+        getDocs(qProfile).then((snap) => {
+          if (!snap.empty && snap.docs[0].data().role === 'admin') {
+            setIsAuthorized(true);
+            setCheckingAccess(false);
+          } else {
+            // Not an admin account - eject to home frame
+            router.push('/');
+          }
+        }).catch((err) => {
+          console.error("Access verification fault:", err);
+          router.push('/');
+        });
+      }
     });
 
-    // 2. Live stream every field checkpoint log transmitted
+    return () => unsubscribeAuth();
+  }, [router]);
+
+  // 2. STREAM ALL INCOMING TELEMETRY CHANNELS
+  useEffect(() => {
+    if (!isAuthorized) return;
+
     const logsCollection = collection(db, 'telemetryLogs');
     const unsubscribeLogs = onSnapshot(logsCollection, (snapshot) => {
-      const logs: any[] = [];
+      const fetchedLogs: any[] = [];
       snapshot.forEach((doc) => {
-        logs.push({ id: doc.id, ...doc.data() });
+        fetchedLogs.push({ id: doc.id, ...doc.data() });
       });
-      // Sort newest check-ins to the top
-      logs.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-      setIncomingLogs(logs);
+      // Sort newest transmissions first
+      fetchedLogs.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+      setLogs(fetchedLogs);
+      setLoading(false);
+    }, (err) => {
+      console.error("Stream tracking hook error:", err);
       setLoading(false);
     });
 
-    return () => {
-      unsubscribeMissions();
-      unsubscribeLogs();
-    };
-  }, []);
+    return () => unsubscribeLogs();
+  }, [isAuthorized]);
 
-  const formatDisplayDateTime = (timestampValue: any) => {
-    if (!timestampValue) return 'Processing...';
-    let targetDate;
-    if (typeof timestampValue.toDate === 'function') {
-      targetDate = timestampValue.toDate();
-    } else {
-      targetDate = new Date(timestampValue);
-    }
-    if (isNaN(targetDate.getTime())) return 'Invalid Date';
-    return targetDate.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
+  // LAUNCH CONTROL SUITE MODAL WITH STAGE DATA
+  const openCorrectionModal = (log: any) => {
+    setSelectedLogId(log.id);
+    setEditVoyagerId(log.voyagerId || '');
+    setEditHandlerName(log.handlerName || '');
+    setEditReportedLocation(log.reportedLocation || '');
+    setEditLatitude(log.latitude || '');
+    setEditLongitude(log.longitude || '');
+    setEditIsVerified(log.verified === true);
+    setIsEditModalOpen(true);
   };
 
+  // COMMIT MODIFIED DATA VECTOR BACK TO FIREBASE
+  const handleSaveTelemetryCorrection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLogId) return;
+
+    setSavingAction(true);
+    try {
+      const logDocRef = doc(db, 'telemetryLogs', selectedLogId);
+      await updateDoc(logDocRef, {
+        voyagerId: editVoyagerId.trim().toUpperCase(),
+        handlerName: editHandlerName.trim(),
+        reportedLocation: editReportedLocation.trim().toUpperCase(),
+        latitude: editLatitude.trim(),
+        longitude: editLongitude.trim(),
+        verified: editIsVerified
+      });
+
+      setIsEditModalOpen(false);
+    } catch (err) {
+      console.error("Failed to commit telemetry change card:", err);
+      alert('Mainframe rejected telemetry override modification.');
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const formatDisplayDate = (timestampValue: any) => {
+    if (!timestampValue) return 'Pending...';
+    const d = typeof timestampValue.toDate === 'function' ? timestampValue.toDate() : new Date(timestampValue);
+    return isNaN(d.getTime()) ? 'Invalid Time' : d.toLocaleString();
+  };
+
+  if (checkingAccess) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center font-mono text-xs text-slate-400 animate-pulse uppercase tracking-widest">Verifying Admin Security Clearance...</div>;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <header className="border-b border-slate-900 pb-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-black tracking-wider uppercase text-slate-200">HQ GLOBAL COMMAND OVERRIDE</h1>
-            <p className="text-xs font-mono text-slate-500 uppercase mt-1">System Status: Active Terminal Uplink</p>
-          </div>
-        </header>
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-6 flex flex-col h-screen overflow-hidden">
+      
+      {/* TERMINAL NAVIGATION BAR */}
+      <header className="pb-4 border-b border-slate-900 flex justify-between items-center shrink-0">
+        <div>
+          <h1 className="text-xl font-black tracking-widest uppercase text-slate-100">COMMAND CONTROL CENTER</h1>
+          <p className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-widest mt-0.5">Secure Mainframe Override Panel</p>
+        </div>
+        <Link href="/" className="text-xs font-mono font-bold bg-slate-900 border border-slate-800 hover:bg-slate-800 px-4 py-2 rounded-xl transition-all uppercase tracking-wider text-slate-200">
+          ← Main Console
+        </Link>
+      </header>
 
-        {loading ? (
-          <div className="text-center py-12 text-xs font-mono text-slate-600 animate-pulse">ESTABLISHING SECURE STREAMS...</div>
-        ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      {/* CORE LOG ENGINE AREA */}
+      <main className="flex-1 overflow-hidden flex flex-col mt-4">
+        <div className="bg-slate-900/40 border border-slate-900 rounded-2xl flex flex-col h-full overflow-hidden shadow-2xl">
+          <div className="p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur shrink-0">
+            <h2 className="text-xs font-mono font-black tracking-widest text-slate-200 uppercase">Incoming Fleet Telemetry Stream Logs</h2>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {loading ? (
+              <div className="text-center py-12 font-mono text-xs text-slate-500 animate-pulse">SYNCHRONIZING SECURE STREAM FEEDS...</div>
+            ) : logs.length === 0 ? (
+              <div className="text-center py-12 font-mono text-xs text-slate-500 uppercase tracking-widest">No Telemetry Stream Transfers Registered In Grid.</div>
+            ) : (
+              <div className="space-y-3">
+                {logs.map((log) => (
+                  <div key={log.id} className="p-4 bg-slate-950/80 border border-slate-900 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 font-mono text-xs shadow-md">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center space-x-3 flex-wrap gap-y-1">
+                        <span className="text-blue-400 font-black text-sm tracking-wider">{log.voyagerId || 'UNKNOWN'}</span>
+                        <span className="text-slate-100 font-bold">Sign-off: <span className="text-white font-black">{log.handlerName || 'None'}</span></span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-900 text-slate-300 border border-slate-800">
+                          📍 {log.reportedLocation || 'UNRESOLVED'}
+                        </span>
+                        {log.verified && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-950/80 text-emerald-400 border border-emerald-900/40 tracking-widest animate-pulse">
+                            ✓ Verified
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-slate-300 pt-0.5">
+                        <div><span className="text-slate-500 font-bold">LAT:</span> {log.latitude || 'NOT SET'}</div>
+                        <div><span className="text-slate-500 font-bold">LONG:</span> {log.longitude || 'NOT SET'}</div>
+                        <div className="col-span-2 text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Timestamp: {formatDisplayDate(log.timestamp)}</div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => openCorrectionModal(log)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] px-3.5 py-2 rounded-lg transition-all uppercase tracking-wider shrink-0 shadow w-full sm:w-auto text-center"
+                    >
+                      Correct Data
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      {/* TELEMETRY CALIBRATION CONTROL MODAL */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5 shadow-2xl relative font-mono text-xs text-slate-100">
             
-            {/* COLUMN 1: TRACKING NODES */}
-            <section className="space-y-4">
-              <h2 className="text-xs font-bold font-mono tracking-widest text-blue-400 uppercase">📡 ACTIVE MISSION REGISTRY ({deployedMissions.length})</h2>
-              <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
-                {deployedMissions.length === 0 ? (
-                  <div className="p-4 bg-slate-900/40 border border-slate-900 rounded-xl font-mono text-xs text-slate-600 text-center uppercase">No Active Vectors Found.</div>
-                ) : (
-                  deployedMissions.map((mission) => (
-                    <div key={mission.id} className="p-4 bg-slate-900/40 border border-slate-900 rounded-xl space-y-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="text-xs font-mono text-slate-500 uppercase block">LOGBOOK ID</span>
-                          <span className="text-sm font-black text-slate-200 uppercase tracking-wide">{mission.id}</span>
-                        </div>
-                        <span className="px-2 py-0.5 text-[9px] font-mono font-bold uppercase rounded bg-blue-950 text-blue-400 border border-blue-900/30">TRAVELLING</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-slate-950/50 p-2 rounded-lg border border-slate-900/50 text-slate-400">
-                        <div><span className="text-slate-600 block text-[9px]">ORIGIN</span>{mission.originCity}</div>
-                        <div><span className="text-slate-600 block text-[9px]">DESTINATION</span>{mission.destinationCity}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
+            <header className="text-center space-y-1">
+              <h3 className="text-sm font-black tracking-widest uppercase text-white">TELEMETRY VECTOR OVERRIDE</h3>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider">Modifying Transmission Log Signature Reference</p>
+            </header>
 
-            {/* COLUMN 2: TELEMETRY LOGS */}
-            <section className="space-y-4">
-              <h2 className="text-xs font-bold font-mono tracking-widest text-emerald-400 uppercase">📍 INCOMING TELEMETRY STREAMS ({incomingLogs.length})</h2>
-              <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
-                {incomingLogs.length === 0 ? (
-                  <div className="p-4 bg-slate-900/40 border border-slate-900 rounded-xl font-mono text-xs text-slate-600 text-center uppercase">Awaiting Field Transmissions...</div>
-                ) : (
-                  incomingLogs.map((log) => (
-                    <div key={log.id} className="p-4 bg-slate-900/40 border border-slate-900 rounded-xl flex items-start space-x-4">
-                      {log.imageUrl && (
-                        <div className="w-16 h-16 rounded-lg bg-slate-950 border border-slate-900 overflow-hidden shrink-0 shadow-inner">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={log.imageUrl} alt="Telemetry Check" className="w-full h-full object-cover" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0 font-mono text-xs space-y-1">
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-emerald-400 font-bold uppercase">#{log.voyagerId}</span>
-                          <span className="text-slate-500">{formatDisplayDateTime(log.timestamp)}</span>
-                        </div>
-                        <p className="text-slate-300 font-bold truncate">{log.reportedLocation}</p>
-                        <p className="text-[10px] text-slate-500 uppercase tracking-tight truncate">Handler: {log.handlerName || 'Anonymous'}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
+            <form onSubmit={handleSaveTelemetryCorrection} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">VESSEL KEY ID</label>
+                  <input type="text" required value={editVoyagerId} onChange={(e) => setEditVoyagerId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold uppercase" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">HANDLER NAME</label>
+                  <input type="text" required value={editHandlerName} onChange={(e) => setEditHandlerName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+                </div>
               </div>
-            </section>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-slate-300 uppercase">REPORTED LOCATION NAME</label>
+                <input type="text" required value={editReportedLocation} onChange={(e) => setEditReportedLocation(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">GRID LATITUDE (X)</label>
+                  <input type="text" placeholder="e.g. 36.1627" value={editLatitude} onChange={(e) => setEditLatitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-300 uppercase">GRID LONGITUDE (Y)</label>
+                  <input type="text" placeholder="e.g. -86.7816" value={editLongitude} onChange={(e) => setEditLongitude(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+                </div>
+              </div>
+
+              {/* TACTICAL VERIFICATION STATUS FLAG TOGGLE */}
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between mt-2">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-black tracking-wide uppercase text-slate-100">VERIFIED HANDLER CHECK-IN</span>
+                  <p className="text-[9px] text-slate-400 lowercase font-normal">Authorize stream accuracy status validation flag</p>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={editIsVerified} 
+                  onChange={(e) => setEditIsVerified(e.target.checked)}
+                  className="w-5 h-5 accent-blue-500 cursor-pointer rounded border-slate-800 focus:ring-0 bg-slate-950"
+                />
+              </div>
+
+              <div className="pt-2 flex flex-col space-y-2">
+                <button type="submit" disabled={savingAction} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-widest py-3 px-4 rounded-xl transition-all disabled:opacity-50">
+                  {savingAction ? 'SAVING DATA CORRECTIONS...' : 'COMMIT OVERRIDE MATRIX'}
+                </button>
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="w-full bg-transparent text-slate-400 hover:text-slate-200 uppercase tracking-wider py-1.5 font-bold text-[10px]">
+                  [Abort Override Request]
+                </button>
+              </div>
+            </form>
 
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
     </div>
   );
 }
