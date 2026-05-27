@@ -291,10 +291,10 @@ export default function VesselControl() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full xl:w-auto font-mono text-left">
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900><span className="text-[10px] text-slate-200 block font-bold uppercase">T-MET (SINCE LAUNCH)</span><span className="text-sm font-black text-blue-400 tracking-widest">{timeSinceLaunch}</span></div>
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900><span className="text-[10px] text-slate-200 block font-bold uppercase">TSLC (SINCE CHECKIN)</span><span className="text-sm font-black text-emerald-400 tracking-widest">{timeSinceCheckin}</span></div>
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900><span className="text-[10px] text-slate-200 block font-bold uppercase">DISPLACEMENT</span><span className="text-base font-black text-amber-500">{milesFromLaunch.toLocaleString()} MI</span></div>
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900><span className="text-[10px] text-slate-200 block font-bold uppercase">TOTAL TRAVELED</span><span className="text-base font-black text-cyan-400">{totalMilesTraveled.toLocaleString()} MI</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">T-MET (SINCE LAUNCH)</span><span className="text-sm font-black text-blue-400 tracking-widest">{timeSinceLaunch}</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">TSLC (SINCE CHECKIN)</span><span className="text-sm font-black text-emerald-400 tracking-widest">{timeSinceCheckin}</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">DISPLACEMENT</span><span className="text-base font-black text-amber-500">{milesFromLaunch.toLocaleString()} MI</span></div>
+            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-900"><span className="text-[10px] text-slate-200 block font-bold uppercase">TOTAL TRAVELED</span><span className="text-base font-black text-cyan-400">{totalMilesTraveled.toLocaleString()} MI</span></div>
           </div>
         </div>
       </header>
