@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
 import { db, storage } from '../../../../firebase/config';
-import { doc, getDoc, collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 
@@ -53,7 +53,7 @@ export default function FieldCheckin() {
     let uploadedImageUrl = '';
 
     try {
-      // 1. INLINE ACCOUNT PROVISIONING HANDSHAKE
+      // 1. INLINE ACCOUNT PROVISIONING HANDSHAKE (IF REQUESTED)
       if (wantsAccount) {
         if (!authEmail.trim() || !authPassword.trim()) {
           setStatusMessage('⚠️ EMAIL AND PASSWORD ARE REQUIRED FOR PROFILE REGISTRATION.');
@@ -66,10 +66,9 @@ export default function FieldCheckin() {
         const credential = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
         const newUser = credential.user;
 
-        // Save account record reference blueprint
+        // Save account record reference blueprint using top-level imports
+        setStatusMessage('PROVISIONING PROFILE RECORD...');
         const userDocRef = doc(db, 'users', newUser.uid);
-        // Using a dynamic require block or standard setDoc if imported
-        const { setDoc } = require('firebase/firestore');
         await setDoc(userDocRef, {
           uid: newUser.uid,
           email: newUser.email,
@@ -102,14 +101,13 @@ export default function FieldCheckin() {
       setIsSuccess(true);
       setStatusMessage('TRANSMISSION SUCCESSFUL. DATA SECTIONS LOCKED IN.');
       
-      // Auto routing back to main viewing dashboard grid after 3 seconds
       setTimeout(() => {
         router.push(`/mission/${voyagerId.toLowerCase()}?fromCheckin=true`);
       }, 3000);
 
     } catch (err: any) {
-      console.error("Transmission stack crash:", err);
-      setStatusMessage('⚠️ CRITICAL FAIL: TRANSACTION MATRIX REJECTED BY DATABASE.');
+      console.error("Transmission stack crash details:", err);
+      setStatusMessage(`⚠️ CRITICAL FAIL: ${err.message || 'TRANSACTION MATRIX REJECTED BY DATABASE.'}`);
       setSubmitting(false);
     }
   };
@@ -138,33 +136,30 @@ export default function FieldCheckin() {
 
         <form onSubmit={handleTransmitTelemetry} className="space-y-4 font-mono text-xs">
           
-          {/* HANDLER PROFILE INPUT */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">HANDLER ID SIGN-OFF</label>
             <input 
               type="text" 
               required 
-              placeholder="e.g., Mark" 
+              placeholder="e.g., Carl" 
               value={handlerName} 
               onChange={(e) => setHandlerName(e.target.value)} 
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-bold" 
             />
           </div>
 
-          {/* PHYSICAL LOCATION INPUT */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">CURRENT PHYSICAL LOCATION</label>
             <input 
               type="text" 
               required 
-              placeholder="E.G. DAPHNE, AL" 
+              placeholder="E.G. TULSA, OK" 
               value={reportedLocation} 
               onChange={(e) => setReportedLocation(e.target.value)} 
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 uppercase font-bold" 
             />
           </div>
 
-          {/* PHOTO ATTACHMENT DRAG FIELD */}
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">CAPTURE VERIFICATION ASSET (PHOTO/POSTCARD)</label>
             <input 
@@ -176,7 +171,6 @@ export default function FieldCheckin() {
             />
           </div>
 
-          {/* --- INLINE INTERACTIVE REGISTRATION EXPANDER --- */}
           <div className="bg-slate-950/80 border border-slate-850 p-3.5 rounded-xl space-y-3 mt-2">
             <label className="flex items-center space-x-3 cursor-pointer select-none">
               <input 
@@ -191,7 +185,7 @@ export default function FieldCheckin() {
             </label>
 
             {wantsAccount && (
-              <div className="space-y-3 pt-2 border-t border-slate-900 animate-fadeIn">
+              <div className="space-y-3 pt-2 border-t border-slate-900">
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">EMAIL COMM MATRIX</label>
                   <input 
@@ -224,7 +218,6 @@ export default function FieldCheckin() {
             </p>
           )}
 
-          {/* EMERALD TRANSMIT BUTTON TARGET */}
           <button 
             type="submit" 
             disabled={submitting}
