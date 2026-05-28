@@ -35,7 +35,7 @@ export default function Home() {
   const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false);
   const [launchVoyagerId, setLaunchVoyagerId] = useState('');
   const [launchOriginCity, setLaunchOriginCity] = useState('');
-  const [launchLifecycleTarget, setLaunchLifecycleTarget] = useState('21'); // Defaulting to your 21 check-in suggestion
+  const [launchLifecycleTarget, setLaunchLifecycleTarget] = useState('21'); 
   const [launchLatitude, setLaunchLatitude] = useState('');
   const [launchLongitude, setLaunchLongitude] = useState('');
   const [launchImageFile, setLaunchImageFile] = useState<File | null>(null);
@@ -93,7 +93,6 @@ export default function Home() {
     return `TV-${String(i + 1).padStart(2, '0')}`;
   });
 
-  // Dynamic status processor tracking user-configured limits & MIA injects
   const processVesselStats = (vesselId: string, baselineData: any) => {
     if (!baselineData) return { count: 0, target: 21, isMissing: false, isComplete: false, lastPin: null };
 
@@ -108,12 +107,11 @@ export default function Home() {
     
     let currentLat = parseFloat(baselineData.latitude);
     let currentLng = parseFloat(baselineData.longitude);
-    let label = `DEPLOYMENT VECTOR: ${baselineData.originCity}`;
+    let label = `PROLOGUE NODE: ${baselineData.originCity}`;
 
     vesselLogs.forEach((log) => {
       const logTimeMs = log.timestamp?.toDate ? log.timestamp.toDate().getTime() : new Date(log.timestamp).getTime();
       
-      // Inject missing checkins for 30-day stagnation gaps
       while (logTimeMs - lastEventTimeMs > 30 * 24 * 60 * 60 * 1000) {
         totalCheckins++;
         lastEventTimeMs += 30 * 24 * 60 * 60 * 1000;
@@ -129,7 +127,7 @@ export default function Home() {
       if (!isNaN(pLat) && !isNaN(pLng)) {
         currentLat = pLat;
         currentLng = pLng;
-        label = log.reportedLocation || 'FIELD CHECK-IN';
+        label = log.reportedLocation || 'JOURNAL ENTRY';
       }
     });
 
@@ -186,7 +184,7 @@ export default function Home() {
       await setDoc(doc(db, 'voyagerMissions', targetVesselId), {
         missionId: targetVesselId,
         originCity: finalOriginText,
-        lifecycleTarget: cleanTargetLimit, // Storing dynamic variable limit
+        lifecycleTarget: cleanTargetLimit, 
         latitude: finalLat,
         longitude: finalLng,
         launchImageUrl: uploadedImageUrl,
@@ -195,8 +193,8 @@ export default function Home() {
 
       await setDoc(doc(collection(db, 'telemetryLogs')), {
         voyagerId: targetVesselId,
-        handlerName: 'SYSTEM CONSOLE',
-        reportedLocation: `DEPLOYMENT VECTOR: ${finalOriginText}`,
+        handlerName: 'ARCHIVE CONSOLE',
+        reportedLocation: `PROLOGUE LAYER: ${finalOriginText}`,
         latitude: finalLat,
         longitude: finalLng,
         imageUrl: uploadedImageUrl,
@@ -226,25 +224,28 @@ export default function Home() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
+      {/* JOURNAL MASTER HEAD DECK */}
       <header className="p-4 border-b border-slate-900 bg-slate-900/40 backdrop-blur shrink-0 z-40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-xl font-black tracking-widest text-slate-100 uppercase">TERRA VOYAGER</h1>
-          <p className="text-[10px] font-mono text-slate-300 uppercase tracking-widest font-bold mt-0.5">Central Fleet Command & Telemetry Engine</p>
+          <h1 className="text-xl font-black tracking-widest text-slate-100 uppercase">THE TRAVELING JOURNAL PROJECT</h1>
+          <p className="text-[10px] font-mono text-slate-300 uppercase tracking-widest font-bold mt-0.5">A Collective Chronicle of Shared Travels & Handwritten Stories</p>
         </div>
         <div className="font-mono text-[11px] uppercase tracking-wider">
           {currentUser && userProfile ? (
             <div className="flex items-center space-x-4">
-              <span className="text-white font-bold">📡 CALLSIGN: <span className="text-blue-400 font-black">{userProfile.username}</span></span>
-              {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[CONSOLE]</Link>}
-              <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[DISCONNECT]</button>
+              <span className="text-white font-bold">📡 AUTHOR: <span className="text-blue-400 font-black">{userProfile.username}</span></span>
+              {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[EDIT CONTROL]</Link>}
+              <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
             </div>
           ) : (
-            <button onClick={() => setIsAuthModalOpen(true)} className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0">[LOGIN // ACCESS KEY]</button>
+            <button onClick={() => setIsAuthModalOpen(true)} className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0">[LOG IN TO HANDLER PORTAL]</button>
           )}
         </div>
       </header>
 
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative z-10">
+        
+        {/* GEOGRAPHIC GRID INDEX */}
         <section className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative shrink-0">
           <MapContainer center={[37.0902, -95.7129]} zoom={4} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
@@ -253,8 +254,8 @@ export default function Home() {
                 <Popup>
                   <div className="text-slate-900 font-mono text-xs font-bold p-1">
                     <span className="text-blue-600 font-black block text-sm">{pin.vesselId}</span>
-                    <span className="block mt-1 text-slate-700">Last Point: {pin.label}</span>
-                    <Link href={`/mission/${pin.vesselId.toLowerCase()}`} className="text-blue-500 underline block mt-2 text-[11px] uppercase font-black">Open Vessel Deck →</Link>
+                    <span className="block mt-1 text-slate-700">Last entry: {pin.label}</span>
+                    <Link href={`/mission/${pin.vesselId.toLowerCase()}`} className="text-blue-500 underline block mt-2 text-[11px] uppercase font-black">Open Volume Ledger →</Link>
                   </div>
                 </Popup>
               </Marker>
@@ -262,13 +263,14 @@ export default function Home() {
           </MapContainer>
         </section>
 
+        {/* JOURNAL LEDGER CHRONICLES GRID */}
         <section className="w-full md:w-1/2 flex flex-col h-auto md:h-full overflow-hidden bg-slate-900/10">
           <div className="p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur shrink-0 flex justify-between items-center">
-            <h2 className="text-xs font-mono font-black text-slate-100 uppercase tracking-widest">FLEET LIFECYCLE TARGET MATRIX</h2>
+            <h2 className="text-xs font-mono font-black text-slate-100 uppercase tracking-widest">VOLUME LIFE EXPEDITION REGISTRY</h2>
             <div className="flex items-center space-x-3 font-mono text-[9px] font-bold uppercase text-slate-300">
-              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 block"></span><span>Active</span></div>
-              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500 block"></span><span>Stagnant</span></div>
-              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block"></span><span>Complete</span></div>
+              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 block"></span><span>Active Logs</span></div>
+              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 block"></span><span>MIA</span></div>
+              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block"></span><span>Completed</span></div>
             </div>
           </div>
 
@@ -283,21 +285,21 @@ export default function Home() {
                   <Link 
                     key={id} href={`/mission/${id.toLowerCase()}`}
                     className={`border-2 rounded-xl p-2.5 text-center transition-all flex flex-col items-center justify-center cursor-pointer ${
-                      isComplete ? 'bg-emerald-950/40 border-emerald-500 hover:bg-emerald-900/40' :
-                      isMissing ? 'bg-yellow-950/40 border-yellow-500 hover:bg-yellow-950/70' :
-                      'bg-blue-950/80 border-blue-500 hover:bg-blue-900'
+                      isComplete ? 'bg-emerald-950/40 border-emerald-500 hover:bg-emerald-900/40 shadow-md' :
+                      isMissing ? 'bg-yellow-950/40 border-yellow-500 hover:bg-yellow-950/70 shadow-md' :
+                      'bg-blue-950/80 border-blue-500 hover:bg-blue-900 shadow-md'
                     }`}
                   >
                     <span className="text-[13px] font-mono font-black text-white tracking-wider">{id}</span>
-                    <span className="text-[10px] font-mono font-bold text-slate-300">{count}/{target}</span>
+                    <span className="text-[10px] font-mono font-bold text-slate-300">{count}/{target} pgs</span>
                   </Link>
                 ) : isAdmin ? (
                   <button 
                     key={id} onClick={() => { setLaunchVoyagerId(id); setIsLaunchModalOpen(true); }}
-                    className="bg-slate-900/40 border border-slate-800 border-dashed hover:border-emerald-500 hover:bg-emerald-950/20 rounded-xl p-3 text-center flex flex-col items-center justify-center transition-all"
+                    className="bg-slate-900/40 border border-slate-800 border-dashed hover:border-emerald-500 hover:bg-emerald-950/20 rounded-xl p-3 text-center flex flex-col items-center justify-center transition-all cursor-pointer group"
                   >
-                    <span className="text-[12px] font-mono font-bold text-slate-500">{id}</span>
-                    <span className="text-[8px] font-mono font-black text-emerald-500">[LAUNCH]</span>
+                    <span className="text-[12px] font-mono font-bold text-slate-500 group-hover:text-emerald-400">{id}</span>
+                    <span className="text-[8px] font-mono font-black text-emerald-500 tracking-wider">[BIND]</span>
                   </button>
                 ) : (
                   <div key={id} className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 text-center opacity-[0.15] select-none">
@@ -310,29 +312,63 @@ export default function Home() {
         </section>
       </main>
 
-      {/* LAUNCH MODAL */}
+      {/* BOOK BINDING ADMINISTRATIVE TERMINAL */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
-            <h3 className="text-sm font-black uppercase text-center text-white">PROVISION & LAUNCH {launchVoyagerId}</h3>
+            <h3 className="text-sm font-black uppercase text-center text-white tracking-widest">BIND & DEPLOY JOURNAL VOLUME {launchVoyagerId}</h3>
             <form onSubmit={handleLaunchNewVessel} className="space-y-4 text-xs">
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
-                  <label className="text-[9px] font-bold text-slate-300 block mb-1">ORIGIN ZIP OR CITY, STATE</label>
-                  <input type="text" required placeholder="e.g. 36526" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold" />
+                  <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Initial Prologue Location</label>
+                  <input type="text" required placeholder="e.g. 36526 or Daphne, AL" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500" />
                 </div>
                 <div>
-                  <label className="text-[9px] font-bold text-slate-300 block mb-1">CHECK-IN TARGET</label>
-                  <input type="number" required min="1" max="100" value={launchLifecycleTarget} onChange={(e) => setLaunchLifecycleTarget(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold text-center" />
+                  <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Page Target</label>
+                  <input type="number" required min="1" max="110" value={launchLifecycleTarget} onChange={(e) => setLaunchLifecycleTarget(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold text-center focus:outline-none focus:border-blue-500" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <input type="text" placeholder="LAT (BLANK IF ZIP)" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
-                <input type="text" placeholder="LNG (BLANK IF ZIP)" value={launchLongitude} onChange={(e) => setLaunchLongitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+                <input type="text" placeholder="LATITUDE (OPTIONAL)" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500" />
+                <input type="text" placeholder="LONGITUDE (OPTIONAL)" value={launchLongitude} onChange={(e) => setLaunchLongitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500" />
               </div>
-              <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 py-3 rounded-xl font-black uppercase tracking-widest text-white mt-2">INITIALIZE DEPLOYMENT PATH</button>
-              <button type="button" onClick={() => setIsLaunchModalOpen(false)} className="w-full text-center text-slate-500 text-[10px]">[ABORT REQUEST]</button>
+              <div>
+                <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Volume Cover Frontispiece Photo</label>
+                <input type="file" accept="image/*" onChange={(e) => setLaunchImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
+              </div>
+              
+              {launchError && <p className="text-rose-400 text-[10px] text-center uppercase bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {launchError}</p>}
+
+              <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-black uppercase tracking-widest text-white mt-2 cursor-pointer transition-all shadow-md">
+                {launchingAction ? 'COMMITTING JOURNAL TO ARCHIVES...' : 'INITIALIZE VOLUME CHRONICLE'}
+              </button>
+              <button type="button" onClick={() => setIsLaunchModalOpen(false)} className="w-full text-center text-slate-500 text-[10px] uppercase tracking-wider font-bold bg-transparent p-0 border-0 mt-1 cursor-pointer hover:text-slate-400">[Abort Binding Request]</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* USER ACCESS PASS SYSTEM */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
+          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-2xl relative">
+            <header className="text-center space-y-1.5">
+              <h2 className="text-sm font-black tracking-widest text-white uppercase">{isSignUpMode ? 'Register Account' : 'Identity Verification'}</h2>
+              <p className="text-[9px] text-slate-300 uppercase tracking-wider">{isSignUpMode ? 'Register author callsign' : 'Input verification passkey'}</p>
+            </header>
+            <form onSubmit={handleAuthAction} className="space-y-4">
+              {isSignUpMode && (
+                <input type="text" required placeholder="CHOOSE CALLSIGN" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white uppercase font-bold text-center focus:outline-none focus:border-blue-500" />
+              )}
+              <input type="email" required placeholder="EMAIL CORRESPONDENCE VECTOR" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500" />
+              <input type="password" required placeholder="SECURE PASSWORD" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500" />
+              {authActionError && <p className="text-rose-400 text-[10px] text-center uppercase tracking-wide bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {authActionError}</p>}
+              <button type="submit" disabled={authActionLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all disabled:opacity-50 cursor-pointer">{authActionLoading ? 'PROCESSING...' : isSignUpMode ? 'CREATE PROFILE' : 'VERIFY AUTHOR KEY'}</button>
+            </form>
+            <div className="border-t border-slate-800 pt-4 flex flex-col space-y-2 text-[10px] text-center">
+              <button type="button" onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthActionError(''); }} className="text-blue-400 hover:underline uppercase bg-transparent border-0 cursor-pointer font-bold">{isSignUpMode ? '[Returning Authors log in]' : '[Request New Handler Enlistment]'}</button>
+              <button type="button" onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-200 uppercase bg-transparent border-0 cursor-pointer tracking-wider text-[9px]">[Cancel]</button>
+            </div>
           </div>
         </div>
       )}
