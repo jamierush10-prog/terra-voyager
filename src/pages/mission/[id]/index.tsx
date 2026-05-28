@@ -13,7 +13,7 @@ const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { 
 const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false });
 
 // CUSTOM FORCE-INVALIDATE MAP COMPONENT TO FIX THE TILE LAYOUT BUG
-共和国 AUTOMATED TILE REFRESHER
+// AUTOMATED TILE REFRESHER
 function MapTileCalibrator({ center }: { center: [number, number] }) {
   const { useMap } = require('react-leaflet');
   const map = useMap();
