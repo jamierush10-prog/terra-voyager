@@ -120,7 +120,7 @@ export default function Home() {
       setAuthUsername('');
     } catch (err: any) {
       setAuthActionError('Clearance criteria rejected or invalid parameters.');
-    } finally {
+    } fillAll {
       setAuthActionLoading(false);
     }
   };
@@ -256,7 +256,7 @@ export default function Home() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-      {/* FIXED HEADER WITH RIGID CLOSING TAG INTEGRATION */}
+      {/* HEADER SEGMENT WITH PERMANENT TAG CLOSURES & CLEAN USER TEXT */}
       <header className="p-4 border-b border-slate-900 bg-slate-900/40 backdrop-blur shrink-0 z-40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl font-black tracking-widest text-slate-100 uppercase">THE TRAVELING JOURNAL PROJECT</h1>
@@ -267,7 +267,8 @@ export default function Home() {
             <span className="text-slate-400 animate-pulse">CONNECTING ARCHIVES...</span>
           ) : currentUser && userProfile ? (
             <div className="flex items-center space-x-4">
-              <span className="text-white font-bold">CALLSIGN: <span className="text-blue-400 font-black">{userProfile.username}</span></span>
+              {/* REMOVED STRIDED REPEATED SYMBOLS OR EMOJIS HERE */}
+              <span className="text-white font-black">{userProfile.username}</span>
               {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[EDIT CONTROL]</Link>}
               <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
             </div>
@@ -347,7 +348,7 @@ export default function Home() {
         </section>
       </main>
 
-      {/* MODALS CONTAINMENT */}
+      {/* ADMIN LAUNCH ENTRY OVERLAYS */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
@@ -385,7 +386,7 @@ export default function Home() {
               <h2 className="text-sm font-black uppercase text-white tracking-wider">{isSignUpMode ? 'Register Callsign' : 'Identity Verification'}</h2>
             </header>
             <form onSubmit={handleAuthAction} className="space-y-3">
-              {isSignUpMode && <input type="text" required placeholder="CALLSIGN ID" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white uppercase font-bold" />}
+              {isSignUpMode && <input type="text" required placeholder="CALLSIGN ID" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white uppercase font-bold text-center" />}
               <input type="email" required placeholder="EMAIL ADDR" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
               <input type="password" required placeholder="PASSWORD KEY" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
               {authActionError && <p className="text-rose-400 text-[10px] text-center bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {authActionError}</p>}
