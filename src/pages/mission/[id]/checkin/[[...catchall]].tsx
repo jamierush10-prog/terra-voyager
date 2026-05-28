@@ -12,6 +12,7 @@ export default function FieldCheckin() {
 
   const [handlerName, setHandlerName] = useState('');
   const [reportedLocation, setReportedLocation] = useState('');
+  // PICTURE REMAINING OPTIONAL (NOT REQUIRED FOR POSSESSION VERIFICATION)
   const [imageFile, setImageFile] = useState<File | null>(null);
   
   const [wantsAccount, setWantsAccount] = useState(false);
@@ -81,7 +82,7 @@ export default function FieldCheckin() {
     try {
       if (wantsAccount) {
         if (!authEmail.trim() || !authPassword.trim()) {
-          setStatusMessage('⚠️ REGISTRATION FOR AUTHOR CODES REQUIRES BOTH INPUTS.');
+          setStatusMessage('⚠️ ACCOUNT PROVISIONING REQUIRES BOTH EMAIL AND PASSKEY.');
           setSubmitting(false);
           return;
         }
@@ -99,8 +100,9 @@ export default function FieldCheckin() {
         });
       }
 
+      // Safe bypass structure check if photo field remains empty
       if (imageFile) {
-        setStatusMessage('ARCHIVING GRAPHIC FOLIO PAGE TRANSLATION COPY...');
+        setStatusMessage('ARCHIVING OPTIONAL ATTACHED ENTRY SNAPSHOT...');
         const storageRef = ref(storage, `telemetry/${voyagerId}_${Date.now()}_${imageFile.name}`);
         const uploadSnapshot = await uploadBytes(storageRef, imageFile);
         uploadedImageUrl = await getDownloadURL(uploadSnapshot.ref);
@@ -155,7 +157,7 @@ export default function FieldCheckin() {
         <form onSubmit={handleTransmitTelemetry} className="space-y-4 font-mono text-xs">
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">NEW CUSTODIAN SIGN-OFF</label>
-            <input type="text" required placeholder="e.g., Mark" value={handlerName} onChange={(e) => setHandlerName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-bold uppercase" />
+            <input type="text" required placeholder="E.G., MARK" value={handlerName} onChange={(e) => setHandlerName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-bold uppercase" />
           </div>
 
           <div className="space-y-1.5">
@@ -163,15 +165,20 @@ export default function FieldCheckin() {
             <input type="text" required placeholder="E.G. 36526 OR DAPHNE, AL" value={reportedLocation} onChange={(e) => setReportedLocation(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
           </div>
 
+          {/* PHOTO REMAINS COMPLETELY OPTIONAL (REQUIRED FLAG STRIPPED OUT) */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">SNAPSHOT YOUR DEDICATED JOURNAL PAGE</label>
-            <input type="file" accept="image/*" required onChange={(e) => setImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded-md file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
+            <div className="flex justify-between items-center">
+              <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">ATTACH AN IMAGE (OPTIONAL)</label>
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Not Required</span>
+            </div>
+            <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded-md file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
           </div>
 
           <div className="bg-slate-950/80 border border-slate-850 p-3.5 rounded-xl space-y-3 mt-2">
             <label className="flex items-center space-x-3 cursor-pointer select-none">
               <input type="checkbox" checked={wantsAccount} onChange={(e) => setWantsAccount(e.target.checked)} className="w-4 h-4 accent-blue-500 bg-slate-900 border-slate-800 rounded cursor-pointer" />
-              <span className="text-[10px] font-black tracking-wide text-slate-200 uppercase">New Handler? Create a permanent author account</span>
+              {/* UPDATED HEADING ACCORDING TO JOURNAL TRAVEL SUBSCRIPTION RE-FRAMING */}
+              <span className="text-[10px] font-black tracking-wide text-slate-200 uppercase">Create a User Account to follow the journal's travel</span>
             </label>
 
             {wantsAccount && (
