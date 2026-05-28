@@ -12,9 +12,17 @@ export default function FieldCheckin() {
 
   const [handlerName, setHandlerName] = useState('');
   const [reportedLocation, setReportedLocation] = useState('');
-  // PICTURE REMAINING OPTIONAL (NOT REQUIRED FOR POSSESSION VERIFICATION)
   const [imageFile, setImageFile] = useState<File | null>(null);
   
+  // MULTI-SELECT CHECKBOX STATES
+  const [optReceived, setOptReceived] = useState(false);
+  const [optCompleted, setOptCompleted] = useState(false);
+  const [optPassedOn, setOptPassedOn] = useState(false);
+  const [optRoutine, setOptRoutine] = useState(false);
+  
+  // CONDITIONAL HAND-OFF RECIPIENT
+  const [recipientName, setRecipientName] = useState('');
+
   const [wantsAccount, setWantsAccount] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -25,25 +33,37 @@ export default function FieldCheckin() {
 
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
+  const [isGpsActive, setIsGpsActive] = useState(false);
 
-  useEffect(() => {
+  // OPT-IN DEVICE LOCATION METHOD
+  const handleRequestDeviceLocation = () => {
     if (typeof window !== 'undefined' && navigator.geolocation) {
+      setStatusMessage('REQUESTING DEVICE PING...');
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setLatitude(position.coords.latitude.toString());
           setLongitude(position.coords.longitude.toString());
+          setIsGpsActive(true);
+          setStatusMessage('DEVICE LOCATION CAPTURED FOR THIS ENTRY.');
         },
         (error) => {
-          console.warn("GPS coordinates declined. Relying on background ZIP lookup code rules.");
+          setIsGpsActive(false);
+          setStatusMessage('⚠️ LOCATION REQUEST DENIED. PLEASE ENTER MANUALLY.');
         },
         { enableHighAccuracy: true, timeout: 8000 }
       );
     }
-  }, []);
+  };
 
   const handleTransmitTelemetry = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!voyagerId || !handlerName.trim() || !reportedLocation.trim()) return;
+
+    // Validate that at least one tracking scenario checkbox is selected
+    if (!optReceived && !optCompleted && !optPassedOn && !optRoutine) {
+      setStatusMessage('⚠️ PLEASE SELECT AT LEAST ONE CHECK-IN OPTION FROM THE LIST.');
+      return;
+    }
 
     setSubmitting(true);
     setStatusMessage('INITIALIZING SECURE LEDGER CONNECT...');
@@ -55,7 +75,7 @@ export default function FieldCheckin() {
 
     const isZipCode = /^\d{5}$/.test(reportedLocation.trim());
     
-    if (isZipCode) {
+    if (isZipCode && !isGpsActive) {
       try {
         setStatusMessage('RESOLVING ZIP BOUNDARIES & CITY LABELS...');
         const geoResponse = await fetch(
@@ -75,7 +95,7 @@ export default function FieldCheckin() {
           finalLocationText = `${city.toUpperCase()}, ${state}`;
         }
       } catch (err) {
-        console.error("Geocoding timeout fallback:", err);
+        console.error(err);
       }
     }
 
@@ -86,8 +106,7 @@ export default function FieldCheckin() {
           setSubmitting(false);
           return;
         }
-        setStatusMessage('INKING PERMANENT AUTHOR IDENTITY CODES...');
-        
+        setStatusMessage('INKING ACCOUNT CODES...');
         const auth = getAuth();
         const credential = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
         const newUser = credential.user;
@@ -95,18 +114,24 @@ export default function FieldCheckin() {
         await setDoc(doc(db, 'users', newUser.uid), {
           uid: newUser.uid,
           email: newUser.email,
-          username: handlerName.trim(),
+          username: handlerName.trim().toUpperCase(),
           role: 'user'
         });
       }
 
-      // Safe bypass structure check if photo field remains empty
       if (imageFile) {
-        setStatusMessage('ARCHIVING OPTIONAL ATTACHED ENTRY SNAPSHOT...');
+        setStatusMessage('ARCHIVING ATTACHED FILE COPIES...');
         const storageRef = ref(storage, `telemetry/${voyagerId}_${Date.now()}_${imageFile.name}`);
         const uploadSnapshot = await uploadBytes(storageRef, imageFile);
         uploadedImageUrl = await getDownloadURL(uploadSnapshot.ref);
       }
+
+      // Build descriptive multi-status contextual display string for timeline card tags
+      let actionsList: string[] = [];
+      if (optReceived) actionsList.push("POSSESSION INITIALIZED");
+      if (optCompleted) actionsList.push("ENTRY COMPLETED");
+      if (optPassedOn) actionsList.push(`TRANSFERRED CUSTODY${recipientName ? ` TO ${recipientName.trim().toUpperCase()}` : ''}`);
+      if (optRoutine) actionsList.push("ROUTING UPDATE");
 
       setStatusMessage('SEALING CUSTODY LOG TRANSFERS...');
       await addDoc(collection(db, 'telemetryLogs'), {
@@ -117,7 +142,16 @@ export default function FieldCheckin() {
         longitude: finalLng || 'NOT RECORDED',
         imageUrl: uploadedImageUrl,
         timestamp: new Date(),
-        verified: false
+        verified: false,
+        // Storage of split behavioral fields
+        journalOptions: {
+          tookPossession: optReceived,
+          entryCompleted: optCompleted,
+          passedPossession: optPassedOn,
+          recipient: recipientName.trim().toUpperCase() || null,
+          routineUpdate: optRoutine
+        },
+        displayActionContext: actionsList.join(" // ")
       });
 
       setIsSuccess(true);
@@ -139,7 +173,7 @@ export default function FieldCheckin() {
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 font-mono text-center">
         <div className="w-full max-w-md bg-slate-900 border-2 border-emerald-500 rounded-2xl p-8 space-y-4 shadow-2xl">
           <span className="text-4xl">✍️</span>
-          <h2 className="text-base font-black text-emerald-400 uppercase tracking-widest">CUSTODY TRANSFER SUCCESSFUL</h2>
+          <h2 className="text-base font-black text-emerald-400 uppercase tracking-widest">LOG DATA SECURED</h2>
           <p className="text-xs text-slate-300 uppercase leading-relaxed">{statusMessage}</p>
         </div>
       </div>
@@ -155,29 +189,68 @@ export default function FieldCheckin() {
         </header>
 
         <form onSubmit={handleTransmitTelemetry} className="space-y-4 font-mono text-xs">
+          
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">NEW CUSTODIAN SIGN-OFF</label>
+            <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">YOUR NAME / SIGN-OFF</label>
             <input type="text" required placeholder="E.G., MARK" value={handlerName} onChange={(e) => setHandlerName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-bold uppercase" />
+          </div>
+
+          {/* CHECKBOX GRID MATRIX */}
+          <div className="space-y-2.5 bg-slate-950/40 border border-slate-900 p-4 rounded-xl">
+            <label className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider mb-1">Select Check-in Options (Select all that apply):</label>
+            
+            <label className="flex items-start space-x-3 cursor-pointer select-none py-0.5">
+              <input type="checkbox" checked={optReceived} onChange={(e) => setOptReceived(e.target.checked)} className="w-4 h-4 accent-blue-500 bg-slate-900 border-slate-800 rounded cursor-pointer mt-0.5" />
+              <span className="text-[11px] font-medium text-slate-200">I have taken initial possession of this journal</span>
+            </label>
+
+            <label className="flex items-start space-x-3 cursor-pointer select-none py-0.5">
+              <input type="checkbox" checked={optCompleted} onChange={(e) => setOptCompleted(e.target.checked)} className="w-4 h-4 accent-blue-500 bg-slate-900 border-slate-800 rounded cursor-pointer mt-0.5" />
+              <span className="text-[11px] font-medium text-slate-200">Handwritten journal entry is completed</span>
+            </label>
+
+            <label className="flex items-start space-x-3 cursor-pointer select-none py-0.5">
+              <input type="checkbox" checked={optPassedOn} onChange={(e) => setOptPassedOn(e.target.checked)} className="w-4 h-4 accent-blue-500 bg-slate-900 border-slate-800 rounded cursor-pointer mt-0.5" />
+              <span className="text-[11px] font-medium text-slate-200">The journal is no longer in my possession</span>
+            </label>
+
+            {/* CONDITIONAL DEPENDENT FIELD FOR RECIPIENT */}
+            {optPassedOn && (
+              <div className="pl-7 pt-1 animate-fadeIn space-y-1">
+                <label className="text-[9px] font-bold text-slate-400 uppercase block tracking-wider">Who did you turn the journal over to?</label>
+                <input type="text" required={optPassedOn} placeholder="RECIPIENT NAME OR CALLSIGN" value={recipientName} onChange={(e) => setRecipientName(e.target.value)} className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-white font-bold uppercase focus:outline-none focus:border-blue-500" />
+              </div>
+            )}
+
+            <label className="flex items-start space-x-3 cursor-pointer select-none py-0.5">
+              <input type="checkbox" checked={optRoutine} onChange={(e) => setOptRoutine(e.target.checked)} className="w-4 h-4 accent-blue-500 bg-slate-900 border-slate-800 rounded cursor-pointer mt-0.5" />
+              <span className="text-[11px] font-medium text-slate-200">Routine status update (Still in hand / traveling)</span>
+            </label>
+          </div>
+
+          {/* PRIVACY LOG LOCATION BANNER INJECTED HERE */}
+          <div className="bg-blue-950/20 border border-blue-900/40 rounded-xl p-3.5 space-y-2.5 text-slate-300 text-[11px] leading-relaxed">
+            <p>
+              📌 <strong className="text-blue-400 uppercase tracking-wide text-[10px]">Positioning Note:</strong> Selecting <em>"Use Device Location"</em> transmits a single, isolated geographic coordinate ping at the exact moment of entry submission only. The system does not continuously track your device. If you prefer, you can decline location permissions and manually type your current City or ZIP code below.
+            </p>
+            <button type="button" onClick={handleRequestDeviceLocation} className="w-full bg-slate-950 border border-slate-800 text-slate-200 hover:bg-slate-900 font-bold uppercase py-2 px-3 rounded-lg text-[10px] tracking-wider transition-all cursor-pointer">
+              {isGpsActive ? '✓ DEVICE POSITION LOCKED' : 'Use Device Location'}
+            </button>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">CURRENT PHYSICAL LOCATION OR ZIP CODE</label>
-            <input type="text" required placeholder="E.G. 36526 OR DAPHNE, AL" value={reportedLocation} onChange={(e) => setReportedLocation(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-bold" />
+            <input type="text" required placeholder="E.G. 36526 OR DAPHNE, AL" value={reportedLocation} onChange={(e) => setReportedLocation(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-bold uppercase" />
           </div>
 
-          {/* PHOTO REMAINS COMPLETELY OPTIONAL (REQUIRED FLAG STRIPPED OUT) */}
           <div className="space-y-1.5">
-            <div className="flex justify-between items-center">
-              <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">ATTACH AN IMAGE (OPTIONAL)</label>
-              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Not Required</span>
-            </div>
+            <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">ATTACH AN IMAGE (OPTIONAL)</label>
             <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded-md file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
           </div>
 
           <div className="bg-slate-950/80 border border-slate-850 p-3.5 rounded-xl space-y-3 mt-2">
             <label className="flex items-center space-x-3 cursor-pointer select-none">
               <input type="checkbox" checked={wantsAccount} onChange={(e) => setWantsAccount(e.target.checked)} className="w-4 h-4 accent-blue-500 bg-slate-900 border-slate-800 rounded cursor-pointer" />
-              {/* UPDATED HEADING ACCORDING TO JOURNAL TRAVEL SUBSCRIPTION RE-FRAMING */}
               <span className="text-[10px] font-black tracking-wide text-slate-200 uppercase">Create a User Account to follow the journal's travel</span>
             </label>
 
@@ -192,7 +265,7 @@ export default function FieldCheckin() {
           {statusMessage && <p className="text-[10px] text-center uppercase tracking-wider bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-slate-300">{statusMessage}</p>}
 
           <button type="submit" disabled={submitting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all shadow-lg text-[13px] disabled:opacity-50 cursor-pointer">
-            {submitting ? 'RECORDING ENTRIES...' : 'LOG VOLUME CUSTODY TRANSFER'}
+            {submitting ? 'RECORDING LOG DATA...' : 'LOG VOLUME CUSTODY TRANSFER'}
           </button>
         </form>
       </div>
