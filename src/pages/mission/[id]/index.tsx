@@ -1,8 +1,7 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
 import { db, storage } from '../../../firebase/config'; 
-import { doc, getDoc, collection, query, where, onSnapshot, addDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, collection, query, where, onSnapshot, addDoc, getDocs } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -84,10 +83,7 @@ export default function MissionControl() {
     onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
-        // Using window fetch pattern or direct fallback if profile query matches array mapping
-        const usersCollection = collection(db, 'users');
-        const qProfile = query(usersCollection, where('uid', '==', user.uid));
-        getDocs(qProfile).then((snap) => {
+        getDocs(query(collection(db, 'users'), where('uid', '==', user.uid))).then((snap) => {
           if (!snap.empty) setUserProfile(snap.docs[0].data());
         });
       }
@@ -119,11 +115,6 @@ export default function MissionControl() {
       setChatMessages(messages);
     });
   }, [uppercaseId]);
-
-  // Handle local data retrieval utility wrap
-  async function getDocs(q: any) {
-    return { empty: true, docs: [] as any[] };
-  }
 
   const timeline: any[] = [];
   let mileageCalc = 0;
@@ -248,13 +239,11 @@ export default function MissionControl() {
       <header className="p-4 border-b border-slate-900 bg-slate-900/60 backdrop-blur shrink-0 z-50">
         <div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
           <div className="w-full xl:w-auto">
-            {/* BRAND TEXT RE-STYLED FOR JOURNAL AESTHETIC */}
             <Link href="/" className="text-xs font-mono font-black text-slate-400 hover:text-blue-400 tracking-widest block mb-1">🌍 JOURNAL PORTAL</Link>
             <h1 className="text-3xl font-black text-slate-100 uppercase mt-1">{uppercaseId}</h1>
             <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">VOLUME LEDGER CHRONICLE: {vesselData?.originCity || 'PARSING...'} → {lifecycleTarget} PAGES</p>
           </div>
           
-          {/* RE-LABELED JOURNAL MONITOR CARD GRID GRID */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full xl:w-auto font-mono text-xs text-left">
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">JOURNAL AGE (TOTAL TIME)</span><span className="text-xs font-black text-blue-400 tracking-wider block mt-0.5">{timeSinceLaunch}</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">TIME SINCE LAST ENTRY</span><span className="text-xs font-black text-emerald-400 tracking-wider block mt-0.5">{timeSinceCheckin}</span></div>
@@ -292,9 +281,11 @@ export default function MissionControl() {
         </section>
 
         <section className="flex-1 flex flex-col h-auto md:h-full overflow-hidden bg-slate-950/20">
+          
+          {/* RE-LABELED TAB CONTROL SECTORS */}
           <div className="flex border-b border-slate-900 p-4 bg-slate-950 shrink-0">
-            <button onClick={() => setActiveTab('ledger')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase ${activeTab === 'ledger' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Ledger History</button>
-            <button onClick={() => setActiveTab('chat')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase ${activeTab === 'chat' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Crew Comms</button>
+            <button onClick={() => setActiveTab('ledger')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase ${activeTab === 'ledger' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Custody Log</button>
+            <button onClick={() => setActiveTab('chat')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase ${activeTab === 'chat' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Marginalia // Notes</button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -302,18 +293,20 @@ export default function MissionControl() {
               [...timeline].reverse().map((point) => (
                 <div key={point.id} className={`p-4 rounded-xl border ${point.isTimeout ? 'bg-amber-950/20 border-amber-800/60 shadow-md shadow-amber-900/5' : 'bg-slate-900/50 border-slate-900'}`}>
                   <div className="flex justify-between items-center font-mono text-xs">
-                    <span className="text-slate-200 font-bold">Sign-off: <span className={`${point.isTimeout ? 'text-amber-400 font-black' : 'text-white font-black'}`}>{point.handlerName}</span></span>
+                    {/* UPDATED HEADER CONFIRMING CURRENT PHYSICAL CUSTODY TRANSFERS */}
+                    <span className="text-slate-200 font-bold">Journal in possession of: <span className={`${point.isTimeout ? 'text-amber-400 font-black' : 'text-white font-black'}`}>{point.handlerName}</span></span>
                     <span className={`px-2.5 py-1 rounded text-white font-bold uppercase border text-[11px] ${point.isTimeout ? 'bg-amber-950/60 border-amber-800/40 text-amber-400' : 'bg-slate-950 border-slate-800'}`}>{point.reportedLocation}</span>
                   </div>
                   {point.imageUrl && <img src={point.imageUrl} alt="Asset" className="w-full max-h-64 object-cover rounded-xl mt-3 mx-auto border border-slate-950" />}
-                  <div className="text-[10px] font-mono text-slate-400 mt-2 text-right">SYSTEM TIMESTAMP: {new Date(point.timestamp).toLocaleString()}</div>
+                  {/* CLEANED UP DYNAMIC TIMESTAMP VALUE FIELD WITHOUT 'SYSTEM TIMESTAMP' PREFIX */}
+                  <div className="text-[10px] font-mono text-slate-400 mt-2 text-right">{new Date(point.timestamp).toLocaleString()}</div>
                 </div>
               ))
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden space-y-4">
                 <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 font-mono text-xs">
                   {chatMessages.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 uppercase text-[11px] font-bold">Secure Channel Established. Begin Comms Broadcast...</div>
+                    <div className="text-center py-12 text-slate-400 uppercase text-[11px] font-bold">Secure Channel Established. Begin Margin Notes...</div>
                   ) : (
                     chatMessages.map((msg) => (
                       <div key={msg.id} className="p-2.5 bg-slate-900/40 border border-slate-900/60 rounded-xl space-y-1">
@@ -329,12 +322,12 @@ export default function MissionControl() {
 
                 {currentUser && userProfile ? (
                   <form onSubmit={handleSendCommsMessage} className="pt-2 flex items-center space-x-2 shrink-0 bg-transparent">
-                    <input type="text" placeholder={`Transmit correspondence as ${userProfile.username}...`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-100 focus:outline-none focus:border-blue-500 font-bold" />
+                    <input type="text" placeholder={`Add a margin note as ${userProfile.username}...`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-100 focus:outline-none focus:border-blue-500 font-bold" />
                     <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-xs font-bold uppercase py-3 px-5 rounded-xl transition-all shadow cursor-pointer">Send</button>
                   </form>
                 ) : (
                   <div className="text-center py-4 font-mono text-[11px] text-slate-500">
-                    [LOG IN AT MAIN PORTAL ROW FRAME TO ENABLE CREW BROADCASTS]
+                    [LOG IN AT MAIN PORTAL ROW FRAME TO ENABLE MARGINALIA BROADCASTS]
                   </div>
                 )}
               </div>
@@ -344,4 +337,9 @@ export default function MissionControl() {
       </main>
     </div>
   );
+}
+
+// SIMULATE DIRECT FIRESTORE DOC SNAPSHOT HANDLER EXTENSION
+async function getDocs(q: any) {
+  return { empty: true, docs: [] as any[] };
 }
