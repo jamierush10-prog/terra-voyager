@@ -12,7 +12,7 @@ const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), 
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
 const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false });
 
-// INTERACTIVE MAP CONTROLLER OPTIMIZED FOR SMOOTH INTERPOLATED PANNING
+// INTERACTIVE MAP CONTROLLER FOR FLUID KINETIC ZOOMING
 function MapInteractionController({ center, targetFocus }: { center: [number, number]; targetFocus: [number, number] | null }) {
   const { useMap } = require('react-leaflet');
   const map = useMap();
@@ -20,14 +20,12 @@ function MapInteractionController({ center, targetFocus }: { center: [number, nu
   useEffect(() => {
     if (map) {
       if (targetFocus && !isNaN(targetFocus[0]) && !isNaN(targetFocus[1])) {
-        // ENHANCED: Switched to flyTo with explicit ease curves for fluid kinetic zooming
         map.flyTo(targetFocus, 7, {
           animate: true,
-          duration: 1.5, // Perfect duration for mid-range city steps
+          duration: 1.5, 
           easeLinearity: 0.25
         });
       } else if (center && !isNaN(center[0]) && !isNaN(center[1])) {
-        // Reset base positioning cleanly without structural animation breaks
         map.setView(center, map.getZoom(), { animate: true });
       }
     }
@@ -294,8 +292,8 @@ export default function MissionControl() {
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden max-w-7xl w-full mx-auto relative z-10">
         <section className={`w-full md:w-1/2 border-slate-900 relative shrink-0 transition-all duration-300 ease-in-out ${isMapCollapsed ? 'h-0 border-b-0 hidden md:block md:h-full' : 'h-[40vh] md:h-full border-b md:border-b-0 md:border-r'}`}>
           {mapPoints.length > 0 ? (
-            /* FIXED: Re-enabled default zooming layout triggers */
-            <MapContainer center={dynamicMapCenter} zoom={5} animate={true} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={true}>
+            /* CORRECTED: Stripped out the animate parameter to prevent TypeScript declaration crashes */
+            <MapContainer center={dynamicMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={true}>
               <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
               <MapInteractionController center={dynamicMapCenter} targetFocus={mapTargetFocus} />
               {mapPoints.length > 1 && <Polyline positions={mapPoints} color="#2563eb" weight={3} dashArray="5, 8" />}
