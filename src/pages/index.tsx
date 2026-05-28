@@ -271,10 +271,15 @@ export default function Home() {
             <span className="text-slate-400 animate-pulse">CONNECTING ARCHIVES...</span>
           ) : currentUser && userProfile ? (
             <div className="flex items-center space-x-4">
-              <span className="text-white font-bold">📡 AUTHOR: <span className="text-blue-400 font-black">{userProfile.username}</span></span>
+              {/* CLEANED SIGNATURE LABEL WITHOUT SATELLITE EMOJI OR PREFIX */}
+              <span className="text-white font-bold">CALLSIGN: <span className="text-blue-400 font-black">{userProfile.username}</span></span>
               {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[EDIT CONTROL]</Link>}
               <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
             </div>
+          ) : (
+            <button onClick={() => { setIsAuthModalOpen(true); }} className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0">[LOG IN TO HANDLER PORTAL]</button>
+          )}
+        </div>
           ) : (
             <button onClick={() => { setIsSignUpMode(false); setAuthActionError(''); setIsAuthModalOpen(true); }} className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0">[LOG IN TO HANDLER PORTAL]</button>
           )}
