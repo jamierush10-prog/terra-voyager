@@ -93,6 +93,42 @@ export default function Home() {
     return `TV-${String(i + 1).padStart(2, '0')}`;
   });
 
+  // RESTORED SECURITY PORTAL PASSKEY SUBMISSION SEQUENCE
+  const handleAuthAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword.trim()) return;
+    if (isSignUpMode && !authUsername.trim()) return;
+
+    setAuthActionLoading(true);
+    setAuthActionError('');
+    const auth = getAuth();
+
+    try {
+      if (isSignUpMode) {
+        const credential = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        const user = credential.user;
+        const newProfile = {
+          uid: user.uid,
+          email: user.email,
+          username: authUsername.trim(),
+          role: 'user'
+        };
+        await setDoc(doc(db, 'users', user.uid), newProfile);
+        setUserProfile(newProfile);
+      } else {
+        await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+      }
+      setIsAuthModalOpen(false);
+      setAuthEmail('');
+      setAuthPassword('');
+      setAuthUsername('');
+    } catch (err: any) {
+      setAuthActionError('Clearance criteria rejected or invalid signature credentials.');
+    } finally {
+      setAuthActionLoading(false);
+    }
+  };
+
   const processVesselStats = (vesselId: string, baselineData: any) => {
     if (!baselineData) return { count: 0, target: 21, isMissing: false, isComplete: false, lastPin: null };
 
@@ -224,21 +260,23 @@ export default function Home() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-      {/* JOURNAL MASTER HEAD DECK */}
+      {/* HEADER BLOCK */}
       <header className="p-4 border-b border-slate-900 bg-slate-900/40 backdrop-blur shrink-0 z-40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl font-black tracking-widest text-slate-100 uppercase">THE TRAVELING JOURNAL PROJECT</h1>
           <p className="text-[10px] font-mono text-slate-300 uppercase tracking-widest font-bold mt-0.5">A Collective Chronicle of Shared Travels & Handwritten Stories</p>
         </div>
         <div className="font-mono text-[11px] uppercase tracking-wider">
-          {currentUser && userProfile ? (
+          {authLoading ? (
+            <span className="text-slate-400 animate-pulse">CONNECTING ARCHIVES...</span>
+          ) : currentUser && userProfile ? (
             <div className="flex items-center space-x-4">
               <span className="text-white font-bold">📡 AUTHOR: <span className="text-blue-400 font-black">{userProfile.username}</span></span>
               {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[EDIT CONTROL]</Link>}
               <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
             </div>
           ) : (
-            <button onClick={() => setIsAuthModalOpen(true)} className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0">[LOG IN TO HANDLER PORTAL]</button>
+            <button onClick={() => { setIsSignUpMode(false); setAuthActionError(''); setIsAuthModalOpen(true); }} className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0">[LOG IN TO HANDLER PORTAL]</button>
           )}
         </div>
       </header>
@@ -275,39 +313,43 @@ export default function Home() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 bg-slate-950/40">
-            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2.5">
-              {fleetRegistryIds.map((id) => {
-                const baseline = activeVessels[id];
-                const isDeployed = !!baseline;
-                const { count, target, isMissing, isComplete } = processVesselStats(id, baseline);
+            {loading ? (
+              <div className="text-center py-12 font-mono text-xs text-slate-400 animate-pulse">READING VOLUME ARCHIVES...</div>
+            ) : (
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2.5">
+                {fleetRegistryIds.map((id) => {
+                  const baseline = activeVessels[id];
+                  const isDeployed = !!baseline;
+                  const { count, target, isMissing, isComplete } = processVesselStats(id, baseline);
 
-                return isDeployed ? (
-                  <Link 
-                    key={id} href={`/mission/${id.toLowerCase()}`}
-                    className={`border-2 rounded-xl p-2.5 text-center transition-all flex flex-col items-center justify-center cursor-pointer ${
-                      isComplete ? 'bg-emerald-950/40 border-emerald-500 hover:bg-emerald-900/40 shadow-md' :
-                      isMissing ? 'bg-yellow-950/40 border-yellow-500 hover:bg-yellow-950/70 shadow-md' :
-                      'bg-blue-950/80 border-blue-500 hover:bg-blue-900 shadow-md'
-                    }`}
-                  >
-                    <span className="text-[13px] font-mono font-black text-white tracking-wider">{id}</span>
-                    <span className="text-[10px] font-mono font-bold text-slate-300">{count}/{target} pgs</span>
-                  </Link>
-                ) : isAdmin ? (
-                  <button 
-                    key={id} onClick={() => { setLaunchVoyagerId(id); setIsLaunchModalOpen(true); }}
-                    className="bg-slate-900/40 border border-slate-800 border-dashed hover:border-emerald-500 hover:bg-emerald-950/20 rounded-xl p-3 text-center flex flex-col items-center justify-center transition-all cursor-pointer group"
-                  >
-                    <span className="text-[12px] font-mono font-bold text-slate-500 group-hover:text-emerald-400">{id}</span>
-                    <span className="text-[8px] font-mono font-black text-emerald-500 tracking-wider">[BIND]</span>
-                  </button>
-                ) : (
-                  <div key={id} className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 text-center opacity-[0.15] select-none">
-                    <span className="text-[12px] font-mono font-bold text-slate-500">{id}</span>
-                  </div>
-                );
-              })}
-            </div>
+                  return isDeployed ? (
+                    <Link 
+                      key={id} href={`/mission/${id.toLowerCase()}`}
+                      className={`border-2 rounded-xl p-2.5 text-center transition-all flex flex-col items-center justify-center cursor-pointer ${
+                        isComplete ? 'bg-emerald-950/40 border-emerald-500 hover:bg-emerald-900/40 shadow-md' :
+                        isMissing ? 'bg-yellow-950/40 border-yellow-500 hover:bg-yellow-950/70 shadow-md' :
+                        'bg-blue-950/80 border-blue-500 hover:bg-blue-900 shadow-md'
+                      }`}
+                    >
+                      <span className="text-[13px] font-mono font-black text-white tracking-wider">{id}</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-300">{count}/{target} pgs</span>
+                    </Link>
+                  ) : isAdmin ? (
+                    <button 
+                      key={id} onClick={() => { setLaunchVoyagerId(id); setIsLaunchModalOpen(true); }}
+                      className="bg-slate-900/40 border border-slate-800 border-dashed hover:border-emerald-500 hover:bg-emerald-950/20 rounded-xl p-3 text-center flex flex-col items-center justify-center transition-all cursor-pointer group"
+                    >
+                      <span className="text-[12px] font-mono font-bold text-slate-500 group-hover:text-emerald-400">{id}</span>
+                      <span className="text-[8px] font-mono font-black text-emerald-500 tracking-wider">[BIND]</span>
+                    </button>
+                  ) : (
+                    <div key={id} className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 text-center opacity-[0.15] select-none">
+                      <span className="text-[12px] font-mono font-bold text-slate-500">{id}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </section>
       </main>
