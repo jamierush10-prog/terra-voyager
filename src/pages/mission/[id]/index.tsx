@@ -52,7 +52,6 @@ export default function VesselControl() {
   const [timeSinceLaunch, setTimeSinceLaunch] = useState('00:000:00:00:00');
   const [timeSinceCheckin, setTimeSinceCheckin] = useState('000:00:00:00');
 
-  // MOBILE INTERACTIVE MAP TOGGLE STATE (DEFAULTS TO EXPANDED)
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
 
   const calculateHaversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -223,20 +222,10 @@ export default function VesselControl() {
 
       <header className="p-4 border-b border-slate-900 bg-slate-900/60 backdrop-blur shrink-0 z-50">
         <div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-          <div className="w-full xl:w-auto flex justify-between items-start gap-4">
-            <div>
-              <Link href="/" className="text-xs font-mono font-black text-slate-400 hover:text-blue-400 tracking-widest block mb-1">🌍 FLEET PORTAL</Link>
-              <h1 className="text-3xl font-black text-slate-100 uppercase mt-1">{voyagerId}</h1>
-              <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">ROUTING NODE MATRIX: {vesselMeta?.originCity || 'PARSING...'} → 21 STOPS</p>
-            </div>
-            
-            {/* MOBILE ONLY INTERACTIVE MAP LAYOUT TOGGLE KEY */}
-            <button 
-              onClick={() => setIsMapCollapsed(!isMapCollapsed)}
-              className="md:hidden bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 px-3 py-2 rounded-xl font-mono text-[10px] font-black uppercase tracking-wider transition-all mt-1 shadow"
-            >
-              {isMapCollapsed ? 'Expand Map' : 'Collapse Map'}
-            </button>
+          <div className="w-full xl:w-auto">
+            <Link href="/" className="text-xs font-mono font-black text-slate-400 hover:text-blue-400 tracking-widest block mb-1">🌍 FLEET PORTAL</Link>
+            <h1 className="text-3xl font-black text-slate-100 uppercase mt-1">{voyagerId}</h1>
+            <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">ROUTING NODE MATRIX: {vesselMeta?.originCity || 'PARSING...'} → 21 STOPS</p>
           </div>
           
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full xl:w-auto font-mono text-xs text-left">
@@ -245,13 +234,23 @@ export default function VesselControl() {
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">LIFECYCLE</span><span className="text-sm font-black text-indigo-400 block mt-0.5">{lifecycleCount}/{lifecycleTarget}</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">DISPLACEMENT</span><span className="text-sm font-black text-amber-500 block mt-0.5">{milesFromLaunch.toLocaleString()} MI</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">TOTAL MILES</span><span className="text-sm font-black text-cyan-400 block mt-0.5">{totalMilesTraveled.toLocaleString()} MI</span></div>
+            
+            {/* TARGETED MOBILE RE-POSITIONING VALUE SLOT */}
+            <button 
+              onClick={() => setIsMapCollapsed(!isMapCollapsed)}
+              className="md:hidden bg-slate-900/60 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl p-2 flex flex-col items-center justify-center font-mono font-black tracking-widest text-[10px] uppercase shadow transition-all cursor-pointer min-h-[46px]"
+            >
+              {isMapCollapsed ? 'Expand Map' : 'Collapse Map'}
+            </button>
+
+            {/* KEEP STATUS VISIBLE ON DESKTOP SCREENS */}
+            <div className="hidden sm:block bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">STATUS</span><span className="text-xs font-black text-emerald-400 block mt-0.5">{lifecycleCount >= lifecycleTarget ? "ACCOMPLISHED" : "IN PROGRESS"}</span></div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden max-w-7xl w-full mx-auto relative z-10">
         
-        {/* INTERACTIVE COLLAPSE-RESPONSIVE MAP WRAPPER PANEL */}
         <section className={`w-full md:w-1/2 border-slate-900 relative shrink-0 transition-all duration-300 ease-in-out ${isMapCollapsed ? 'h-0 border-b-0 hidden md:block md:h-full' : 'h-[40vh] md:h-full border-b md:border-b-0 md:border-r'}`}>
           {mapPoints.length > 0 && (
             <MapContainer center={dynamicMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
