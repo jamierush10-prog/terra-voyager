@@ -83,7 +83,9 @@ export default function MissionControl() {
     onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
-        getDocs(query(collection(db, 'users'), where('uid', '==', user.uid))).then((snap) => {
+        const usersCollection = collection(db, 'users');
+        const qProfile = query(usersCollection, where('uid', '==', user.uid));
+        getDocs(qProfile).then((snap) => {
           if (!snap.empty) setUserProfile(snap.docs[0].data());
         });
       }
@@ -281,8 +283,6 @@ export default function MissionControl() {
         </section>
 
         <section className="flex-1 flex flex-col h-auto md:h-full overflow-hidden bg-slate-950/20">
-          
-          {/* RE-LABELED TAB CONTROL SECTORS */}
           <div className="flex border-b border-slate-900 p-4 bg-slate-950 shrink-0">
             <button onClick={() => setActiveTab('ledger')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase ${activeTab === 'ledger' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Custody Log</button>
             <button onClick={() => setActiveTab('chat')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase ${activeTab === 'chat' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Marginalia // Notes</button>
@@ -293,12 +293,10 @@ export default function MissionControl() {
               [...timeline].reverse().map((point) => (
                 <div key={point.id} className={`p-4 rounded-xl border ${point.isTimeout ? 'bg-amber-950/20 border-amber-800/60 shadow-md shadow-amber-900/5' : 'bg-slate-900/50 border-slate-900'}`}>
                   <div className="flex justify-between items-center font-mono text-xs">
-                    {/* UPDATED HEADER CONFIRMING CURRENT PHYSICAL CUSTODY TRANSFERS */}
                     <span className="text-slate-200 font-bold">Journal in possession of: <span className={`${point.isTimeout ? 'text-amber-400 font-black' : 'text-white font-black'}`}>{point.handlerName}</span></span>
                     <span className={`px-2.5 py-1 rounded text-white font-bold uppercase border text-[11px] ${point.isTimeout ? 'bg-amber-950/60 border-amber-800/40 text-amber-400' : 'bg-slate-950 border-slate-800'}`}>{point.reportedLocation}</span>
                   </div>
                   {point.imageUrl && <img src={point.imageUrl} alt="Asset" className="w-full max-h-64 object-cover rounded-xl mt-3 mx-auto border border-slate-950" />}
-                  {/* CLEANED UP DYNAMIC TIMESTAMP VALUE FIELD WITHOUT 'SYSTEM TIMESTAMP' PREFIX */}
                   <div className="text-[10px] font-mono text-slate-400 mt-2 text-right">{new Date(point.timestamp).toLocaleString()}</div>
                 </div>
               ))
@@ -337,9 +335,4 @@ export default function MissionControl() {
       </main>
     </div>
   );
-}
-
-// SIMULATE DIRECT FIRESTORE DOC SNAPSHOT HANDLER EXTENSION
-async function getDocs(q: any) {
-  return { empty: true, docs: [] as any[] };
 }
