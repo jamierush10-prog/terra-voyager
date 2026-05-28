@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
-import { db, storage } from '../../../firebase/config'; 
+import { db } from '../../../firebase/config'; 
 import { doc, collection, query, where, onSnapshot, addDoc, getDocs } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import dynamic from 'next/dynamic';
@@ -32,7 +32,7 @@ function MapTileCalibrator({ center, isCollapsed }: { center: [number, number]; 
 
 export default function MissionControl() {
   const router = useRouter();
-  const { id, fromCheckin } = router.query;
+  const { id } = router.query;
   const uppercaseId = id ? id.toString().toUpperCase() : '';
 
   const [vesselData, setVesselData] = useState<any>(null);
@@ -126,21 +126,63 @@ export default function MissionControl() {
     let lastLng = parseFloat(vesselData.longitude);
     let lastTimeMs = new Date(vesselData.launchDate).getTime();
 
-    timeline.push({
-      id: 'LAUNCH',
-      handlerName: 'ARCHIVE BASE',
-      reportedLocation: `PROLOGUE LAYER: ${vesselData.originCity}`,
-      latitude: lastLat,
-      longitude: lastLng,
-      timestamp: lastTimeMs,
-      isLaunchPad: true
-    });
+    // Check if initial coordinates are clean numeric values
+    if (!isNaN(lastLat) && !isNaN(lastLng)) {
+      timeline.push({
+        id: 'LAUNCH',
+        handlerName: 'ARCHIVE BASE',
+        reportedLocation: `PROLOGUE LAYER: ${vesselData.originCity}`,
+        latitude: lastLat,
+        longitude: lastLng,
+        timestamp: lastTimeMs,
+        isLaunchPad: true
+      });
+    }
 
     logs.forEach((log) => {
       const logTimeMs = log.timestamp?.toDate ? log.timestamp.toDate().getTime() : new Date(log.timestamp).getTime();
 
       while (logTimeMs - lastTimeMs > 30 * 24 * 60 * 60 * 1000) {
         lastTimeMs += 30 * 24 * 60 * 60 * 1000;
+        // Only inject fallback timeouts if previous point positions are cleanly calibrated
+        if (!isNaN(lastLat) && !isNaN(lastLng)) {
+          timeline.push({
+            id: `MIA_${lastTimeMs}`,
+            handlerName: 'SYSTEM MONITOR',
+            reportedLocation: 'MIA CHECK-IN',
+            latitude: lastLat,
+            longitude: lastLng,
+            timestamp: lastTimeMs,
+            isTimeout: true
+          });
+        }
+      }
+
+      if (!log.isLaunchPad) {
+        const currentLat = parseFloat(log.latitude);
+        const currentLng = parseFloat(log.longitude);
+        
+        // STABILIZATION CHECK: Only adjust distances and paths if the location coordinates are legitimate numbers
+        if (!isNaN(currentLat) && !isNaN(currentLng) && !isNaN(lastLat) && !isNaN(lastLng)) {
+          mileageCalc += calculateHaversine(lastLat, lastLng, currentLat, currentLng);
+          lastLat = currentLat;
+          lastLng = currentLng;
+        }
+        
+        timeline.push({ 
+          ...log, 
+          timestamp: logTimeMs,
+          latitude: isNaN(currentLat) ? lastLat : currentLat,
+          longitude: isNaN(currentLng) ? lastLng : currentLng
+        });
+      }
+      lastTimeMs = logTimeMs;
+    });
+
+    let nowMs = new Date().getTime();
+    while (nowMs - lastTimeMs > 30 * 24 * 60 * 60 * 1000) {
+      lastTimeMs += 30 * 24 * 60 * 60 * 1000;
+      if (!isNaN(lastLat) && !isNaN(lastLng)) {
         timeline.push({
           id: `MIA_${lastTimeMs}`,
           handlerName: 'SYSTEM MONITOR',
@@ -151,32 +193,6 @@ export default function MissionControl() {
           isTimeout: true
         });
       }
-
-      if (!log.isLaunchPad) {
-        const currentLat = parseFloat(log.latitude);
-        const currentLng = parseFloat(log.longitude);
-        if (!isNaN(currentLat) && !isNaN(currentLng)) {
-          mileageCalc += calculateHaversine(lastLat, lastLng, currentLat, currentLng);
-          lastLat = currentLat;
-          lastLng = currentLng;
-        }
-        timeline.push({ ...log, timestamp: logTimeMs });
-      }
-      lastTimeMs = logTimeMs;
-    });
-
-    let nowMs = new Date().getTime();
-    while (nowMs - lastTimeMs > 30 * 24 * 60 * 60 * 1000) {
-      lastTimeMs += 30 * 24 * 60 * 60 * 1000;
-      timeline.push({
-        id: `MIA_${lastTimeMs}`,
-        handlerName: 'SYSTEM MONITOR',
-        reportedLocation: 'MIA CHECK-IN',
-        latitude: lastLat,
-        longitude: lastLng,
-        timestamp: lastTimeMs,
-        isTimeout: true
-      });
     }
   }
 
@@ -202,19 +218,23 @@ export default function MissionControl() {
 
       const launchPadNode = timeline[0];
       const latestActiveNode = timeline[timeline.length - 1];
-      const directDisplacement = calculateHaversine(
-        parseFloat(launchPadNode.latitude),
-        parseFloat(launchPadNode.longitude),
-        parseFloat(latestActiveNode.latitude),
-        parseFloat(latestActiveNode.longitude)
-      );
-      setMilesFromLaunch(Math.round(directDisplacement));
+      
+      if (launchPadNode && latestActiveNode) {
+        const directDisplacement = calculateHaversine(
+          parseFloat(launchPadNode.latitude),
+          parseFloat(launchPadNode.longitude),
+          parseFloat(latestActiveNode.latitude),
+          parseFloat(latestActiveNode.longitude)
+        );
+        setMilesFromLaunch(Math.round(directDisplacement));
+      }
     }
   }, [logs, vesselData, mileageCalc, timeline]);
 
+  // STRICT FILTER MATRIX: Eliminates NaN or unrecorded entries from reaching Leaflet core parameters
   const mapPoints: [number, number][] = timeline
     .map(l => [parseFloat(l.latitude), parseFloat(l.longitude)] as [number, number])
-    .filter(p => !isNaN(p[0]) && !isNaN(p[1]));
+    .filter(p => p && !isNaN(p[0]) && !isNaN(p[1]));
 
   const fallbackCenter: [number, number] = [30.6035, -87.9011];
   const dynamicMapCenter = mapPoints.length > 0 ? mapPoints[mapPoints.length - 1] : fallbackCenter;
@@ -266,19 +286,27 @@ export default function MissionControl() {
       </header>
 
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden max-w-7xl w-full mx-auto relative z-10">
-        
         <section className={`w-full md:w-1/2 border-slate-900 relative shrink-0 transition-all duration-300 ease-in-out ${isMapCollapsed ? 'h-0 border-b-0 hidden md:block md:h-full' : 'h-[40vh] md:h-full border-b md:border-b-0 md:border-r'}`}>
-          {mapPoints.length > 0 && (
+          {mapPoints.length > 0 ? (
             <MapContainer center={dynamicMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
               <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
               <MapTileCalibrator center={dynamicMapCenter} isCollapsed={isMapCollapsed} />
               {mapPoints.length > 1 && <Polyline positions={mapPoints} color="#2563eb" weight={3} dashArray="5, 8" />}
-              {timeline.map((point, index) => (
-                <Marker key={point.id} position={[parseFloat(point.latitude), parseFloat(point.longitude)]}>
-                  <Popup><span className="font-mono text-xs font-bold text-slate-900">Stop #{index} - {point.reportedLocation}</span></Popup>
-                </Marker>
-              ))}
+              {timeline.map((point) => {
+                const pLat = parseFloat(point.latitude);
+                const pLng = parseFloat(point.longitude);
+                if (isNaN(pLat) || isNaN(pLng)) return null;
+                return (
+                  <Marker key={point.id} position={[pLat, pLng]}>
+                    <Popup><span className="font-mono text-xs font-bold text-slate-900">{point.displayActionContext || point.reportedLocation} ({point.handlerName})</span></Popup>
+                  </Marker>
+                );
+              })}
             </MapContainer>
+          ) : (
+            <div className="h-full w-full flex items-center justify-center font-mono text-slate-500 text-xs uppercase bg-slate-950">
+              No geographical coordinate vectors recorded for this volume layout.
+            </div>
           )}
         </section>
 
@@ -292,11 +320,18 @@ export default function MissionControl() {
             {activeTab === 'ledger' ? (
               [...timeline].reverse().map((point) => (
                 <div key={point.id} className={`p-4 rounded-xl border ${point.isTimeout ? 'bg-amber-950/20 border-amber-800/60 shadow-md shadow-amber-900/5' : 'bg-slate-900/50 border-slate-900'}`}>
-                  <div className="flex justify-between items-center font-mono text-xs">
+                  <div className="flex justify-between items-center font-mono text-xs gap-3">
                     <span className="text-slate-200 font-bold">Journal in possession of: <span className={`${point.isTimeout ? 'text-amber-400 font-black' : 'text-white font-black'}`}>{point.handlerName}</span></span>
-                    <span className={`px-2.5 py-1 rounded text-white font-bold uppercase border text-[11px] ${point.isTimeout ? 'bg-amber-950/60 border-amber-800/40 text-amber-400' : 'bg-slate-950 border-slate-800'}`}>{point.reportedLocation}</span>
+                    <span className={`px-2.5 py-1 rounded text-white font-bold uppercase border text-[11px] truncate ${point.isTimeout ? 'bg-amber-950/60 border-amber-800/40 text-amber-400' : 'bg-slate-950 border-slate-800'}`}>{point.reportedLocation}</span>
                   </div>
-                  {point.imageUrl && <img src={point.imageUrl} alt="Asset" className="w-full max-h-64 object-cover rounded-xl mt-3 mx-auto border border-slate-950" />}
+                  
+                  {point.displayActionContext && (
+                    <div className="mt-2 text-[10px] font-mono font-black text-blue-400 uppercase bg-blue-950/20 border border-blue-900/30 px-2 py-1 rounded w-fit">
+                      📌 Actions: {point.displayActionContext}
+                    </div>
+                  )}
+
+                  {point.imageUrl && <img src={point.imageUrl} alt="Log Attachment" className="w-full max-h-64 object-cover rounded-xl mt-3 mx-auto border border-slate-950" />}
                   <div className="text-[10px] font-mono text-slate-400 mt-2 text-right">{new Date(point.timestamp).toLocaleString()}</div>
                 </div>
               ))
@@ -309,7 +344,7 @@ export default function MissionControl() {
                     chatMessages.map((msg) => (
                       <div key={msg.id} className="p-2.5 bg-slate-900/40 border border-slate-900/60 rounded-xl space-y-1">
                         <div className="flex justify-between items-center border-b border-slate-950/40 pb-1 text-[11px]">
-                          <span className="text-blue-400 font-black flex items-center">📡 {msg.username}</span>
+                          <span className="text-blue-400 font-black flex items-center">{msg.username}</span>
                           <span className="text-slate-400 font-bold">{msg.timestamp?.toDate ? msg.timestamp.toDate().toLocaleString() : new Date(msg.timestamp).toLocaleString()}</span>
                         </div>
                         <p className="text-slate-100 break-words pt-0.5 text-[13px] font-bold">{msg.messageText}</p>
