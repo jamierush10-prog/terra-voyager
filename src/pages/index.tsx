@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
 import { db, storage } from '../firebase/config';
 import { collection, onSnapshot, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -13,7 +12,6 @@ const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), 
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
 
 export default function Home() {
-  const router = useRouter();
   const [activeVessels, setActiveVessels] = useState<Record<string, any>>({});
   const [telemetryLogs, setTelemetryLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,8 +46,7 @@ export default function Home() {
       const vesselMap: Record<string, any> = {};
       snapshot.forEach((doc) => {
         const data = doc.data();
-        const docIdUpper = doc.id.toUpperCase();
-        vesselMap[docIdUpper] = { id: doc.id, ...data };
+        vesselMap[doc.id.toUpperCase()] = { id: doc.id, ...data };
       });
       setActiveVessels(vesselMap);
     });
@@ -93,7 +90,6 @@ export default function Home() {
     return `TV-${String(i + 1).padStart(2, '0')}`;
   });
 
-  // RESTORED SECURITY PORTAL PASSKEY SUBMISSION SEQUENCE
   const handleAuthAction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail.trim() || !authPassword.trim()) return;
@@ -110,7 +106,7 @@ export default function Home() {
         const newProfile = {
           uid: user.uid,
           email: user.email,
-          username: authUsername.trim(),
+          username: authUsername.trim().toUpperCase(),
           role: 'user'
         };
         await setDoc(doc(db, 'users', user.uid), newProfile);
@@ -123,7 +119,7 @@ export default function Home() {
       setAuthPassword('');
       setAuthUsername('');
     } catch (err: any) {
-      setAuthActionError('Clearance criteria rejected or invalid signature credentials.');
+      setAuthActionError('Clearance criteria rejected or invalid parameters.');
     } finally {
       setAuthActionLoading(false);
     }
@@ -143,7 +139,7 @@ export default function Home() {
     
     let currentLat = parseFloat(baselineData.latitude);
     let currentLng = parseFloat(baselineData.longitude);
-    let label = `PROLOGUE NODE: ${baselineData.originCity}`;
+    let label = `PROLOGUE LAYER: ${baselineData.originCity}`;
 
     vesselLogs.forEach((log) => {
       const logTimeMs = log.timestamp?.toDate ? log.timestamp.toDate().getTime() : new Date(log.timestamp).getTime();
@@ -260,7 +256,7 @@ export default function Home() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-      {/* HEADER BLOCK */}
+      {/* FIXED HEADER WITH RIGID CLOSING TAG INTEGRATION */}
       <header className="p-4 border-b border-slate-900 bg-slate-900/40 backdrop-blur shrink-0 z-40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl font-black tracking-widest text-slate-100 uppercase">THE TRAVELING JOURNAL PROJECT</h1>
@@ -271,7 +267,6 @@ export default function Home() {
             <span className="text-slate-400 animate-pulse">CONNECTING ARCHIVES...</span>
           ) : currentUser && userProfile ? (
             <div className="flex items-center space-x-4">
-              {/* CLEANED SIGNATURE LABEL WITHOUT SATELLITE EMOJI OR PREFIX */}
               <span className="text-white font-bold">CALLSIGN: <span className="text-blue-400 font-black">{userProfile.username}</span></span>
               {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[EDIT CONTROL]</Link>}
               <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
@@ -280,15 +275,9 @@ export default function Home() {
             <button onClick={() => { setIsAuthModalOpen(true); }} className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0">[LOG IN TO HANDLER PORTAL]</button>
           )}
         </div>
-          ) : (
-            <button onClick={() => { setIsSignUpMode(false); setAuthActionError(''); setIsAuthModalOpen(true); }} className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0">[LOG IN TO HANDLER PORTAL]</button>
-          )}
-        </div>
       </header>
 
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative z-10">
-        
-        {/* GEOGRAPHIC GRID INDEX */}
         <section className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative shrink-0">
           <MapContainer center={[37.0902, -95.7129]} zoom={4} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
@@ -297,7 +286,7 @@ export default function Home() {
                 <Popup>
                   <div className="text-slate-900 font-mono text-xs font-bold p-1">
                     <span className="text-blue-600 font-black block text-sm">{pin.vesselId}</span>
-                    <span className="block mt-1 text-slate-700">Last entry: {pin.label}</span>
+                    <span className="block mt-0.5 text-slate-700">Last entry: {pin.label}</span>
                     <Link href={`/mission/${pin.vesselId.toLowerCase()}`} className="text-blue-500 underline block mt-2 text-[11px] uppercase font-black">Open Volume Ledger →</Link>
                   </div>
                 </Popup>
@@ -306,7 +295,6 @@ export default function Home() {
           </MapContainer>
         </section>
 
-        {/* JOURNAL LEDGER CHRONICLES GRID */}
         <section className="w-full md:w-1/2 flex flex-col h-auto md:h-full overflow-hidden bg-slate-900/10">
           <div className="p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur shrink-0 flex justify-between items-center">
             <h2 className="text-xs font-mono font-black text-slate-100 uppercase tracking-widest">VOLUME LIFE EXPEDITION REGISTRY</h2>
@@ -359,7 +347,7 @@ export default function Home() {
         </section>
       </main>
 
-      {/* BOOK BINDING ADMINISTRATIVE TERMINAL */}
+      {/* MODALS CONTAINMENT */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
@@ -368,7 +356,7 @@ export default function Home() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
                   <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Initial Prologue Location</label>
-                  <input type="text" required placeholder="e.g. 36526 or Daphne, AL" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500" />
+                  <input type="text" required placeholder="e.g. 36526" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500" />
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Page Target</label>
@@ -380,42 +368,32 @@ export default function Home() {
                 <input type="text" placeholder="LONGITUDE (OPTIONAL)" value={launchLongitude} onChange={(e) => setLaunchLongitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500" />
               </div>
               <div>
-                <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Volume Cover Frontispiece Photo</label>
+                <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Volume Cover Photo</label>
                 <input type="file" accept="image/*" onChange={(e) => setLaunchImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
               </div>
-              
               {launchError && <p className="text-rose-400 text-[10px] text-center uppercase bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {launchError}</p>}
-
-              <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 hover:bg-emerald-700 py-3 rounded-xl font-black uppercase tracking-widest text-white mt-2 cursor-pointer transition-all shadow-md">
-                {launchingAction ? 'COMMITTING JOURNAL TO ARCHIVES...' : 'INITIALIZE VOLUME CHRONICLE'}
-              </button>
-              <button type="button" onClick={() => setIsLaunchModalOpen(false)} className="w-full text-center text-slate-500 text-[10px] uppercase tracking-wider font-bold bg-transparent p-0 border-0 mt-1 cursor-pointer hover:text-slate-400">[Abort Binding Request]</button>
+              <button type="submit" className="w-full bg-emerald-600 py-3 rounded-xl font-black text-white uppercase tracking-widest">INITIALIZE VOLUME CHRONICLE</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* USER ACCESS PASS SYSTEM */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
-          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-2xl relative">
-            <header className="text-center space-y-1.5">
-              <h2 className="text-sm font-black tracking-widest text-white uppercase">{isSignUpMode ? 'Register Account' : 'Identity Verification'}</h2>
-              <p className="text-[9px] text-slate-300 uppercase tracking-wider">{isSignUpMode ? 'Register author callsign' : 'Input verification passkey'}</p>
+          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <header className="text-center space-y-1">
+              <h2 className="text-sm font-black uppercase text-white tracking-wider">{isSignUpMode ? 'Register Callsign' : 'Identity Verification'}</h2>
             </header>
-            <form onSubmit={handleAuthAction} className="space-y-4">
-              {isSignUpMode && (
-                <input type="text" required placeholder="CHOOSE CALLSIGN" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white uppercase font-bold text-center focus:outline-none focus:border-blue-500" />
-              )}
-              <input type="email" required placeholder="EMAIL CORRESPONDENCE VECTOR" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500" />
-              <input type="password" required placeholder="SECURE PASSWORD" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500" />
-              {authActionError && <p className="text-rose-400 text-[10px] text-center uppercase tracking-wide bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {authActionError}</p>}
-              <button type="submit" disabled={authActionLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all disabled:opacity-50 cursor-pointer">{authActionLoading ? 'PROCESSING...' : isSignUpMode ? 'CREATE PROFILE' : 'VERIFY AUTHOR KEY'}</button>
+            <form onSubmit={handleAuthAction} className="space-y-3">
+              {isSignUpMode && <input type="text" required placeholder="CALLSIGN ID" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white uppercase font-bold" />}
+              <input type="email" required placeholder="EMAIL ADDR" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+              <input type="password" required placeholder="PASSWORD KEY" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+              {authActionError && <p className="text-rose-400 text-[10px] text-center bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {authActionError}</p>}
+              <button type="submit" className="w-full bg-blue-600 py-3 rounded-xl font-black text-white uppercase">{isSignUpMode ? 'CREATE PROFILE' : 'VERIFY KEY'}</button>
             </form>
-            <div className="border-t border-slate-800 pt-4 flex flex-col space-y-2 text-[10px] text-center">
-              <button type="button" onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthActionError(''); }} className="text-blue-400 hover:underline uppercase bg-transparent border-0 cursor-pointer font-bold">{isSignUpMode ? '[Returning Authors log in]' : '[Request New Handler Enlistment]'}</button>
-              <button type="button" onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-200 uppercase bg-transparent border-0 cursor-pointer tracking-wider text-[9px]">[Cancel]</button>
-            </div>
+            <button type="button" onClick={() => setIsSignUpMode(!isSignUpMode)} className="w-full text-center text-blue-400 text-[10px] uppercase font-bold mt-2">
+              {isSignUpMode ? '[Returning Handlers Log In]' : '[Enlist New Profile Key]'}
+            </button>
           </div>
         </div>
       )}
