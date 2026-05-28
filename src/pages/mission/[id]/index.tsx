@@ -12,21 +12,22 @@ const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), 
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
 const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false });
 
-function MapTileCalibrator({ center, isCollapsed }: { center: [number, number]; isCollapsed: boolean }) {
+// MAP CONTROLLER TO PAN AND CENTER DETECTED CUSTODY LOG CLICKS
+function MapInteractionController({ center, targetFocus }: { center: [number, number]; targetFocus: [number, number] | null }) {
   const { useMap } = require('react-leaflet');
   const map = useMap();
-  
+
   useEffect(() => {
-    if (map && !isCollapsed) {
-      setTimeout(() => {
-        map.invalidateSize();
-        if (center && !isNaN(center[0]) && !isNaN(center[1])) {
-          map.setView(center, map.getZoom());
-        }
-      }, 250);
+    if (map) {
+      if (targetFocus && !isNaN(targetFocus[0]) && !isNaN(targetFocus[1])) {
+        // Smoothly glide camera focus to selected custody card pin location
+        map.setView(targetFocus, 8, { animate: true, duration: 1.2 });
+      } else if (center && !isNaN(center[0]) && !isNaN(center[1])) {
+        map.setView(center, map.getZoom());
+      }
     }
-  }, [center, map, isCollapsed]);
-  
+  }, [center, targetFocus, map]);
+
   return null;
 }
 
@@ -54,6 +55,9 @@ export default function MissionControl() {
   const [timeSinceCheckin, setTimeSinceCheckin] = useState('000:00:00:00');
 
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
+  
+  // SELECTION HOOK STATE FOR LIST TRACKING PIN PANORAMAS
+  const [mapTargetFocus, setMapTargetFocus] = useState<[number, number] | null>(null);
 
   const calculateHaversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2 || isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
@@ -126,7 +130,6 @@ export default function MissionControl() {
     let lastLng = parseFloat(vesselData.longitude);
     let lastTimeMs = new Date(vesselData.launchDate).getTime();
 
-    // Check if initial coordinates are clean numeric values
     if (!isNaN(lastLat) && !isNaN(lastLng)) {
       timeline.push({
         id: 'LAUNCH',
@@ -135,7 +138,8 @@ export default function MissionControl() {
         latitude: lastLat,
         longitude: lastLng,
         timestamp: lastTimeMs,
-        isLaunchPad: true
+        isLaunchPad: true,
+        displayActionContext: "PROLOGUE INITIALIZED"
       });
     }
 
@@ -144,7 +148,6 @@ export default function MissionControl() {
 
       while (logTimeMs - lastTimeMs > 30 * 24 * 60 * 60 * 1000) {
         lastTimeMs += 30 * 24 * 60 * 60 * 1000;
-        // Only inject fallback timeouts if previous point positions are cleanly calibrated
         if (!isNaN(lastLat) && !isNaN(lastLng)) {
           timeline.push({
             id: `MIA_${lastTimeMs}`,
@@ -153,7 +156,8 @@ export default function MissionControl() {
             latitude: lastLat,
             longitude: lastLng,
             timestamp: lastTimeMs,
-            isTimeout: true
+            isTimeout: true,
+            displayActionContext: "AUTO INTERVAL OVERRIDE"
           });
         }
       }
@@ -162,7 +166,6 @@ export default function MissionControl() {
         const currentLat = parseFloat(log.latitude);
         const currentLng = parseFloat(log.longitude);
         
-        // STABILIZATION CHECK: Only adjust distances and paths if the location coordinates are legitimate numbers
         if (!isNaN(currentLat) && !isNaN(currentLng) && !isNaN(lastLat) && !isNaN(lastLng)) {
           mileageCalc += calculateHaversine(lastLat, lastLng, currentLat, currentLng);
           lastLat = currentLat;
@@ -190,7 +193,8 @@ export default function MissionControl() {
           latitude: lastLat,
           longitude: lastLng,
           timestamp: lastTimeMs,
-          isTimeout: true
+          isTimeout: true,
+          displayActionContext: "AUTO INTERVAL OVERRIDE"
         });
       }
     }
@@ -231,7 +235,6 @@ export default function MissionControl() {
     }
   }, [logs, vesselData, mileageCalc, timeline]);
 
-  // STRICT FILTER MATRIX: Eliminates NaN or unrecorded entries from reaching Leaflet core parameters
   const mapPoints: [number, number][] = timeline
     .map(l => [parseFloat(l.latitude), parseFloat(l.longitude)] as [number, number])
     .filter(p => p && !isNaN(p[0]) && !isNaN(p[1]));
@@ -290,7 +293,7 @@ export default function MissionControl() {
           {mapPoints.length > 0 ? (
             <MapContainer center={dynamicMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
               <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-              <MapTileCalibrator center={dynamicMapCenter} isCollapsed={isMapCollapsed} />
+              <MapInteractionController center={dynamicMapCenter} targetFocus={mapTargetFocus} />
               {mapPoints.length > 1 && <Polyline positions={mapPoints} color="#2563eb" weight={3} dashArray="5, 8" />}
               {timeline.map((point) => {
                 const pLat = parseFloat(point.latitude);
@@ -298,7 +301,17 @@ export default function MissionControl() {
                 if (isNaN(pLat) || isNaN(pLng)) return null;
                 return (
                   <Marker key={point.id} position={[pLat, pLng]}>
-                    <Popup><span className="font-mono text-xs font-bold text-slate-900">{point.displayActionContext || point.reportedLocation} ({point.handlerName})</span></Popup>
+                    {/* INJECTED COMPREHENSIVE RE-ALIGNED TIMESTAMP AND LOG LABELS INTO PIN TOOLTIPS */}
+                    <Popup>
+                      <div className="font-mono text-xs p-1 text-slate-900 space-y-1">
+                        <div className="font-black text-blue-600 block uppercase">✍️ {point.handlerName}</div>
+                        {point.displayActionContext && <div className="text-[10px] font-bold text-slate-500 uppercase">Action: {point.displayActionContext}</div>}
+                        <div className="text-[10px] font-black text-slate-700 uppercase">📍 {point.reportedLocation}</div>
+                        <div className="text-[9px] border-t border-slate-200 pt-1 text-slate-400 font-bold mt-1">
+                          {new Date(point.timestamp).toLocaleString()}
+                        </div>
+                      </div>
+                    </Popup>
                   </Marker>
                 );
               })}
@@ -319,9 +332,20 @@ export default function MissionControl() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {activeTab === 'ledger' ? (
               [...timeline].reverse().map((point) => (
-                <div key={point.id} className={`p-4 rounded-xl border ${point.isTimeout ? 'bg-amber-950/20 border-amber-800/60 shadow-md shadow-amber-900/5' : 'bg-slate-900/50 border-slate-900'}`}>
+                /* CLICKABLE RE-ENGINEERED DETAILED SELECTION LINK INTERFACE HOOK */
+                <div 
+                  key={point.id} 
+                  onClick={() => {
+                    const lat = parseFloat(point.latitude);
+                    const lng = parseFloat(point.longitude);
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                      setMapTargetFocus([lat, lng]);
+                    }
+                  }}
+                  className="p-4 rounded-xl border bg-slate-900/50 border-slate-900 hover:border-blue-500/50 hover:bg-slate-900 cursor-pointer transition-all group"
+                >
                   <div className="flex justify-between items-center font-mono text-xs gap-3">
-                    <span className="text-slate-200 font-bold">Journal in possession of: <span className={`${point.isTimeout ? 'text-amber-400 font-black' : 'text-white font-black'}`}>{point.handlerName}</span></span>
+                    <span className="text-slate-200 font-bold group-hover:text-blue-400 transition-colors">Journal in possession of: <span className={`${point.isTimeout ? 'text-amber-400 font-black' : 'text-white font-black'}`}>{point.handlerName}</span></span>
                     <span className={`px-2.5 py-1 rounded text-white font-bold uppercase border text-[11px] truncate ${point.isTimeout ? 'bg-amber-950/60 border-amber-800/40 text-amber-400' : 'bg-slate-950 border-slate-800'}`}>{point.reportedLocation}</span>
                   </div>
                   
