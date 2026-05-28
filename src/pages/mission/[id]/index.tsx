@@ -12,12 +12,12 @@ const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), 
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
 const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false });
 
-function MapTileCalibrator({ center }: { center: [number, number] }) {
+function MapTileCalibrator({ center, isCollapsed }: { center: [number, number]; isCollapsed: boolean }) {
   const { useMap } = require('react-leaflet');
   const map = useMap();
   
   useEffect(() => {
-    if (map) {
+    if (map && !isCollapsed) {
       setTimeout(() => {
         map.invalidateSize();
         if (center && !isNaN(center[0]) && !isNaN(center[1])) {
@@ -25,7 +25,7 @@ function MapTileCalibrator({ center }: { center: [number, number] }) {
         }
       }, 250);
     }
-  }, [center, map]);
+  }, [center, map, isCollapsed]);
   
   return null;
 }
@@ -45,12 +45,15 @@ export default function VesselControl() {
   const [userProfile, setUserProfile] = useState<any>(null);
 
   const [totalMilesTraveled, setTotalMilesTraveled] = useState(0);
-  const [milesFromLaunch, setMilesFromLaunch] = useState(0); // Restored state tracking
+  const [milesFromLaunch, setMilesFromLaunch] = useState(0); 
   const [lifecycleCount, setLifecycleCount] = useState(0);
   const [lifecycleTarget, setLifecycleTarget] = useState(21);
 
   const [timeSinceLaunch, setTimeSinceLaunch] = useState('00:000:00:00:00');
   const [timeSinceCheckin, setTimeSinceCheckin] = useState('000:00:00:00');
+
+  // MOBILE INTERACTIVE MAP TOGGLE STATE (DEFAULTS TO EXPANDED)
+  const [isMapCollapsed, setIsMapCollapsed] = useState(false);
 
   const calculateHaversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2 || isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
@@ -195,7 +198,6 @@ export default function VesselControl() {
       const actualCheckins = timeline.filter(item => !item.isLaunchPad).length;
       setLifecycleCount(actualCheckins);
 
-      // RESTORED DIRECT CALCULATION: Distance from point #0 (Launch Pad) to the latest waypoint element
       const launchPadNode = timeline[0];
       const latestActiveNode = timeline[timeline.length - 1];
       const directDisplacement = calculateHaversine(
@@ -221,13 +223,22 @@ export default function VesselControl() {
 
       <header className="p-4 border-b border-slate-900 bg-slate-900/60 backdrop-blur shrink-0 z-50">
         <div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-          <div>
-            <Link href="/" className="text-xs font-mono font-black text-slate-400 hover:text-blue-400 tracking-widest block mb-1">🌍 FLEET PORTAL</Link>
-            <h1 className="text-3xl font-black text-slate-100 uppercase mt-1">{voyagerId}</h1>
-            <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">ROUTING NODE MATRIX: {vesselMeta?.originCity || 'PARSING...'} → 21 STOPS</p>
+          <div className="w-full xl:w-auto flex justify-between items-start gap-4">
+            <div>
+              <Link href="/" className="text-xs font-mono font-black text-slate-400 hover:text-blue-400 tracking-widest block mb-1">🌍 FLEET PORTAL</Link>
+              <h1 className="text-3xl font-black text-slate-100 uppercase mt-1">{voyagerId}</h1>
+              <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">ROUTING NODE MATRIX: {vesselMeta?.originCity || 'PARSING...'} → 21 STOPS</p>
+            </div>
+            
+            {/* MOBILE ONLY INTERACTIVE MAP LAYOUT TOGGLE KEY */}
+            <button 
+              onClick={() => setIsMapCollapsed(!isMapCollapsed)}
+              className="md:hidden bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 px-3 py-2 rounded-xl font-mono text-[10px] font-black uppercase tracking-wider transition-all mt-1 shadow"
+            >
+              {isMapCollapsed ? 'Expand Map' : 'Collapse Map'}
+            </button>
           </div>
           
-          {/* EXPANDED 5-PANEL MONITOR DECK INCLUDING RESTORED DISPLACEMENT CARD */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full xl:w-auto font-mono text-xs text-left">
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">T-MET (SINCE LAUNCH)</span><span className="text-xs font-black text-blue-400 tracking-wider block mt-0.5">{timeSinceLaunch}</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">TSLC (SINCE CHECKIN)</span><span className="text-xs font-black text-emerald-400 tracking-wider block mt-0.5">{timeSinceCheckin}</span></div>
@@ -239,11 +250,13 @@ export default function VesselControl() {
       </header>
 
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden max-w-7xl w-full mx-auto relative z-10">
-        <section className="w-full md:w-1/2 h-[45vh] md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative shrink-0">
+        
+        {/* INTERACTIVE COLLAPSE-RESPONSIVE MAP WRAPPER PANEL */}
+        <section className={`w-full md:w-1/2 border-slate-900 relative shrink-0 transition-all duration-300 ease-in-out ${isMapCollapsed ? 'h-0 border-b-0 hidden md:block md:h-full' : 'h-[40vh] md:h-full border-b md:border-b-0 md:border-r'}`}>
           {mapPoints.length > 0 && (
             <MapContainer center={dynamicMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
               <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-              <MapTileCalibrator center={dynamicMapCenter} />
+              <MapTileCalibrator center={dynamicMapCenter} isCollapsed={isMapCollapsed} />
               {mapPoints.length > 1 && <Polyline positions={mapPoints} color="#2563eb" weight={3} dashArray="5, 8" />}
               {timeline.map((point, index) => (
                 <Marker key={point.id} position={[parseFloat(point.latitude), parseFloat(point.longitude)]}>
