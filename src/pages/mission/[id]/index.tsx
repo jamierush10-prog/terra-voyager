@@ -12,15 +12,12 @@ const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), 
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
 const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false });
 
-// CUSTOM FORCE-INVALIDATE MAP COMPONENT TO FIX THE TILE LAYOUT BUG
-// AUTOMATED TILE REFRESHER
 function MapTileCalibrator({ center }: { center: [number, number] }) {
   const { useMap } = require('react-leaflet');
   const map = useMap();
   
   useEffect(() => {
     if (map) {
-      // Force Leaflet to instantly re-check container dimensions and redraw layout bounding boxes
       setTimeout(() => {
         map.invalidateSize();
         if (center && !isNaN(center[0]) && !isNaN(center[1])) {
@@ -48,10 +45,10 @@ export default function VesselControl() {
   const [userProfile, setUserProfile] = useState<any>(null);
 
   const [totalMilesTraveled, setTotalMilesTraveled] = useState(0);
+  const [milesFromLaunch, setMilesFromLaunch] = useState(0); // Restored state tracking
   const [lifecycleCount, setLifecycleCount] = useState(0);
   const [lifecycleTarget, setLifecycleTarget] = useState(21);
 
-  // RESTORED RUNTIME CLOCK HOOK STATES
   const [timeSinceLaunch, setTimeSinceLaunch] = useState('00:000:00:00:00');
   const [timeSinceCheckin, setTimeSinceCheckin] = useState('000:00:00:00');
 
@@ -178,22 +175,17 @@ export default function VesselControl() {
     }
   }
 
-  // CORE LIVE ACTIVE COUNTERS ENGINE TIMER LOOP
   useEffect(() => {
     const clockTicker = setInterval(() => {
       const rightNow = new Date().getTime();
-      
       if (vesselMeta?.launchDate) {
         setTimeSinceLaunch(formatOperationalDuration(rightNow - new Date(vesselMeta.launchDate).getTime(), true));
       }
-      
-      // Calculate duration since the absolute last recorded timestamp point
       if (timeline.length > 0) {
         const absoluteLastPoint = timeline[timeline.length - 1];
         setTimeSinceCheckin(formatOperationalDuration(rightNow - absoluteLastPoint.timestamp, false));
       }
     }, 1000);
-
     return () => clearInterval(clockTicker);
   }, [vesselMeta, timeline]);
 
@@ -202,8 +194,19 @@ export default function VesselControl() {
       setTotalMilesTraveled(Math.round(mileageCalc));
       const actualCheckins = timeline.filter(item => !item.isLaunchPad).length;
       setLifecycleCount(actualCheckins);
+
+      // RESTORED DIRECT CALCULATION: Distance from point #0 (Launch Pad) to the latest waypoint element
+      const launchPadNode = timeline[0];
+      const latestActiveNode = timeline[timeline.length - 1];
+      const directDisplacement = calculateHaversine(
+        parseFloat(launchPadNode.latitude),
+        parseFloat(launchPadNode.longitude),
+        parseFloat(latestActiveNode.latitude),
+        parseFloat(latestActiveNode.longitude)
+      );
+      setMilesFromLaunch(Math.round(directDisplacement));
     }
-  }, [logs, vesselMeta, mileageCalc, timeline.length]);
+  }, [logs, vesselMeta, mileageCalc, timeline]);
 
   const mapPoints: [number, number][] = timeline
     .map(l => [parseFloat(l.latitude), parseFloat(l.longitude)] as [number, number])
@@ -224,20 +227,18 @@ export default function VesselControl() {
             <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">ROUTING NODE MATRIX: {vesselMeta?.originCity || 'PARSING...'} → 21 STOPS</p>
           </div>
           
-          {/* RESTORED DOUBLE SYSTEM TIMERS + ACCREDITED MILEAGE PANELS */}
+          {/* EXPANDED 5-PANEL MONITOR DECK INCLUDING RESTORED DISPLACEMENT CARD */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full xl:w-auto font-mono text-xs text-left">
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">T-MET (SINCE LAUNCH)</span><span className="text-xs font-black text-blue-400 tracking-wider block mt-0.5">{timeSinceLaunch}</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">TSLC (SINCE CHECKIN)</span><span className="text-xs font-black text-emerald-400 tracking-wider block mt-0.5">{timeSinceCheckin}</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">LIFECYCLE</span><span className="text-sm font-black text-indigo-400 block mt-0.5">{lifecycleCount}/{lifecycleTarget}</span></div>
+            <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">DISPLACEMENT</span><span className="text-sm font-black text-amber-500 block mt-0.5">{milesFromLaunch.toLocaleString()} MI</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">TOTAL MILES</span><span className="text-sm font-black text-cyan-400 block mt-0.5">{totalMilesTraveled.toLocaleString()} MI</span></div>
-            <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl sm:col-span-1 col-span-2"><span className="text-[9px] text-slate-400 block font-bold">STATUS</span><span className="text-xs font-black text-emerald-400 block mt-0.5">{lifecycleCount >= lifecycleTarget ? "ACCOMPLISHED" : "IN PROGRESS"}</span></div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden max-w-7xl w-full mx-auto relative z-10">
-        
-        {/* COMPRESSION ADAPTIVE MAP TRACK PANEL CONTAINER */}
         <section className="w-full md:w-1/2 h-[45vh] md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative shrink-0">
           {mapPoints.length > 0 && (
             <MapContainer center={dynamicMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
