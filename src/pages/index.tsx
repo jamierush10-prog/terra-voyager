@@ -120,7 +120,8 @@ export default function Home() {
       setAuthUsername('');
     } catch (err: any) {
       setAuthActionError('Clearance criteria rejected or invalid parameters.');
-    } fillAll {
+    } finally {
+      // CORRECTED: Restored the proper try-catch-finally syntax
       setAuthActionLoading(false);
     }
   };
@@ -256,7 +257,6 @@ export default function Home() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-      {/* HEADER SEGMENT WITH PERMANENT TAG CLOSURES & CLEAN USER TEXT */}
       <header className="p-4 border-b border-slate-900 bg-slate-900/40 backdrop-blur shrink-0 z-40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl font-black tracking-widest text-slate-100 uppercase">THE TRAVELING JOURNAL PROJECT</h1>
@@ -267,7 +267,6 @@ export default function Home() {
             <span className="text-slate-400 animate-pulse">CONNECTING ARCHIVES...</span>
           ) : currentUser && userProfile ? (
             <div className="flex items-center space-x-4">
-              {/* REMOVED STRIDED REPEATED SYMBOLS OR EMOJIS HERE */}
               <span className="text-white font-black">{userProfile.username}</span>
               {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[EDIT CONTROL]</Link>}
               <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
@@ -348,7 +347,7 @@ export default function Home() {
         </section>
       </main>
 
-      {/* ADMIN LAUNCH ENTRY OVERLAYS */}
+      {/* MODALS CONTAINMENT */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
