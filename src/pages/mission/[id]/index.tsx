@@ -12,7 +12,7 @@ const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), 
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
 const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false });
 
-// MAP CONTROLLER TO PAN AND CENTER DETECTED CUSTODY LOG CLICKS
+// INTERACTIVE MAP CONTROLLER OPTIMIZED FOR SMOOTH INTERPOLATED PANNING
 function MapInteractionController({ center, targetFocus }: { center: [number, number]; targetFocus: [number, number] | null }) {
   const { useMap } = require('react-leaflet');
   const map = useMap();
@@ -20,10 +20,15 @@ function MapInteractionController({ center, targetFocus }: { center: [number, nu
   useEffect(() => {
     if (map) {
       if (targetFocus && !isNaN(targetFocus[0]) && !isNaN(targetFocus[1])) {
-        // Smoothly glide camera focus to selected custody card pin location
-        map.setView(targetFocus, 8, { animate: true, duration: 1.2 });
+        // ENHANCED: Switched to flyTo with explicit ease curves for fluid kinetic zooming
+        map.flyTo(targetFocus, 7, {
+          animate: true,
+          duration: 1.5, // Perfect duration for mid-range city steps
+          easeLinearity: 0.25
+        });
       } else if (center && !isNaN(center[0]) && !isNaN(center[1])) {
-        map.setView(center, map.getZoom());
+        // Reset base positioning cleanly without structural animation breaks
+        map.setView(center, map.getZoom(), { animate: true });
       }
     }
   }, [center, targetFocus, map]);
@@ -55,8 +60,6 @@ export default function MissionControl() {
   const [timeSinceCheckin, setTimeSinceCheckin] = useState('000:00:00:00');
 
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
-  
-  // SELECTION HOOK STATE FOR LIST TRACKING PIN PANORAMAS
   const [mapTargetFocus, setMapTargetFocus] = useState<[number, number] | null>(null);
 
   const calculateHaversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -291,7 +294,8 @@ export default function MissionControl() {
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden max-w-7xl w-full mx-auto relative z-10">
         <section className={`w-full md:w-1/2 border-slate-900 relative shrink-0 transition-all duration-300 ease-in-out ${isMapCollapsed ? 'h-0 border-b-0 hidden md:block md:h-full' : 'h-[40vh] md:h-full border-b md:border-b-0 md:border-r'}`}>
           {mapPoints.length > 0 ? (
-            <MapContainer center={dynamicMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
+            /* FIXED: Re-enabled default zooming layout triggers */
+            <MapContainer center={dynamicMapCenter} zoom={5} animate={true} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={true}>
               <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
               <MapInteractionController center={dynamicMapCenter} targetFocus={mapTargetFocus} />
               {mapPoints.length > 1 && <Polyline positions={mapPoints} color="#2563eb" weight={3} dashArray="5, 8" />}
@@ -301,7 +305,6 @@ export default function MissionControl() {
                 if (isNaN(pLat) || isNaN(pLng)) return null;
                 return (
                   <Marker key={point.id} position={[pLat, pLng]}>
-                    {/* INJECTED COMPREHENSIVE RE-ALIGNED TIMESTAMP AND LOG LABELS INTO PIN TOOLTIPS */}
                     <Popup>
                       <div className="font-mono text-xs p-1 text-slate-900 space-y-1">
                         <div className="font-black text-blue-600 block uppercase">✍️ {point.handlerName}</div>
@@ -332,7 +335,6 @@ export default function MissionControl() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {activeTab === 'ledger' ? (
               [...timeline].reverse().map((point) => (
-                /* CLICKABLE RE-ENGINEERED DETAILED SELECTION LINK INTERFACE HOOK */
                 <div 
                   key={point.id} 
                   onClick={() => {
