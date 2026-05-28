@@ -119,9 +119,8 @@ export default function Home() {
       setAuthPassword('');
       setAuthUsername('');
     } catch (err: any) {
-      setAuthActionError('Clearance criteria rejected or invalid parameters.');
+      setAuthActionError('Identification parameters rejected or invalid credentials.');
     } finally {
-      // CORRECTED: Restored the proper try-catch-finally syntax
       setAuthActionLoading(false);
     }
   };
@@ -257,12 +256,13 @@ export default function Home() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
+      {/* FIXED JOURNAL PORTAL HEADER BAR */}
       <header className="p-4 border-b border-slate-900 bg-slate-900/40 backdrop-blur shrink-0 z-40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl font-black tracking-widest text-slate-100 uppercase">THE TRAVELING JOURNAL PROJECT</h1>
           <p className="text-[10px] font-mono text-slate-300 uppercase tracking-widest font-bold mt-0.5">A Collective Chronicle of Shared Travels & Handwritten Stories</p>
         </div>
-        <div className="font-mono text-[11px] uppercase tracking-wider">
+        <div className="font-mono text-xs uppercase tracking-wider">
           {authLoading ? (
             <span className="text-slate-400 animate-pulse">CONNECTING ARCHIVES...</span>
           ) : currentUser && userProfile ? (
@@ -272,7 +272,8 @@ export default function Home() {
               <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
             </div>
           ) : (
-            <button onClick={() => { setIsAuthModalOpen(true); }} className="text-blue-400 hover:underline font-black bg-transparent border-0 cursor-pointer p-0">[LOG IN TO HANDLER PORTAL]</button>
+            /* CLEAN "SIGN IN" ENTRY ANCHOR LINK WHEN UN-AUTHENTICATED */
+            <button onClick={() => { setIsSignUpMode(false); setAuthActionError(''); setIsAuthModalOpen(true); }} className="text-blue-400 hover:text-blue-300 font-black tracking-widest uppercase transition-all bg-transparent border-0 cursor-pointer p-0">Sign In</button>
           )}
         </div>
       </header>
@@ -347,7 +348,7 @@ export default function Home() {
         </section>
       </main>
 
-      {/* MODALS CONTAINMENT */}
+      {/* BOOK BINDING ADMINISTRATIVE TERMINAL */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
@@ -378,22 +379,31 @@ export default function Home() {
         </div>
       )}
 
+      {/* VERIFY / CREATE ACCOUNT SECURE SYSTEM MODAL */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
-          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
-            <header className="text-center space-y-1">
-              <h2 className="text-sm font-black uppercase text-white tracking-wider">{isSignUpMode ? 'Register Callsign' : 'Identity Verification'}</h2>
+          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-2xl relative">
+            <header className="text-center space-y-1.5">
+              <h2 className="text-sm font-black tracking-widest text-white uppercase">{isSignUpMode ? 'Create Account' : 'Identity Verification'}</h2>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider">{isSignUpMode ? 'Register profile codes' : 'Input verification passkey'}</p>
             </header>
-            <form onSubmit={handleAuthAction} className="space-y-3">
-              {isSignUpMode && <input type="text" required placeholder="CALLSIGN ID" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white uppercase font-bold text-center" />}
-              <input type="email" required placeholder="EMAIL ADDR" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
-              <input type="password" required placeholder="PASSWORD KEY" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
-              {authActionError && <p className="text-rose-400 text-[10px] text-center bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {authActionError}</p>}
-              <button type="submit" className="w-full bg-blue-600 py-3 rounded-xl font-black text-white uppercase">{isSignUpMode ? 'CREATE PROFILE' : 'VERIFY KEY'}</button>
+            <form onSubmit={handleAuthAction} className="space-y-4">
+              {isSignUpMode && (
+                <input type="text" required placeholder="CHOOSE USERNAME" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white uppercase font-bold text-center focus:outline-none focus:border-blue-500" />
+              )}
+              <input type="email" required placeholder="EMAIL ADDR" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500" />
+              <input type="password" required placeholder="PASSWORD KEY" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500" />
+              {authActionError && <p className="text-rose-400 text-[10px] text-center uppercase tracking-wide bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {authActionError}</p>}
+              <button type="submit" disabled={authActionLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all disabled:opacity-50 cursor-pointer">{authActionLoading ? 'PROCESSING...' : isSignUpMode ? 'CREATE PROFILE' : 'VERIFY KEY'}</button>
             </form>
-            <button type="button" onClick={() => setIsSignUpMode(!isSignUpMode)} className="w-full text-center text-blue-400 text-[10px] uppercase font-bold mt-2">
-              {isSignUpMode ? '[Returning Handlers Log In]' : '[Enlist New Profile Key]'}
-            </button>
+            
+            {/* CUSTODIAN ACCOUNT PROVISION HOOK LINKS */}
+            <div className="border-t border-slate-800 pt-4 flex flex-col space-y-2 text-[10px] text-center">
+              <button type="button" onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthActionError(''); }} className="text-blue-400 hover:underline uppercase bg-transparent border-0 cursor-pointer font-bold">
+                {isSignUpMode ? '[Returning Handlers Log In]' : 'Create an account to follow the journal\'s travel'}
+              </button>
+              <button type="button" onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-200 uppercase bg-transparent border-0 cursor-pointer tracking-wider text-[9px]">[Cancel]</button>
+            </div>
           </div>
         </div>
       )}
