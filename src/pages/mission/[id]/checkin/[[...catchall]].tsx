@@ -1,15 +1,15 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
-// FIXED: Calibrated the exact directory depth step back to the Firebase configuration path
 import { db, storage } from '../../../../firebase/config';
-import { collection, addDoc, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 
 export default function FieldCheckin() {
   const router = useRouter();
-  const { id } = router.query;
+  const { id, passKey } = router.query;
   const voyagerId = id ? id.toString().toUpperCase() : '';
+  const urlPasscode = passKey ? passKey.toString() : '';
 
   const [handlerName, setHandlerName] = useState('');
   const [reportedLocation, setReportedLocation] = useState('');
@@ -21,12 +21,10 @@ export default function FieldCheckin() {
   
   const [recipientName, setRecipientName] = useState('');
 
-  // USER REGISTRATION STATES
   const [wantsAccount, setWantsAccount] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
 
-  // IN-LINE MODAL SIGN IN STATES
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -128,17 +126,26 @@ export default function FieldCheckin() {
     }
 
     setSubmitting(true);
-    setStatusMessage('INITIALIZING SECURE LEDGER CONNECT...');
-    
-    let finalLocationText = reportedLocation.trim().toUpperCase();
-    let finalLat = latitude;
-    let finalLng = longitude;
-    let uploadedImageUrl = '';
+    setStatusMessage('VALIDATING HAND-HELD POSSESSION CODES...');
 
-    const isZipCode = /^\d{5}$/.test(reportedLocation.trim());
-    
-    if (isZipCode && !isGpsActive) {
-      try {
+    // EXTRA SECURITY GATING: Validate passcode parameter match before allowing storage write actions
+    const missionRef = doc(db, 'voyagerMissions', voyagerId);
+    try {
+      const missionSnap = await getDoc(missionRef);
+      if (!missionSnap.exists() || missionSnap.data().passcode !== urlPasscode) {
+        setStatusMessage('⚠️ CORE SECURITY OVERRIDE: VERIFICATION CODE CODES DAMAGED OR EXPIRED.');
+        setSubmitting(false);
+        return;
+      }
+
+      let finalLocationText = reportedLocation.trim().toUpperCase();
+      let finalLat = latitude;
+      let finalLng = longitude;
+      let uploadedImageUrl = '';
+
+      const isZipCode = /^\d{5}$/.test(reportedLocation.trim());
+      
+      if (isZipCode && !isGpsActive) {
         setStatusMessage('RESOLVING ZIP BOUNDARIES & CITY LABELS...');
         const geoResponse = await fetch(
           `https://nominatim.openstreetmap.org/search?postalcode=${reportedLocation.trim()}&country=USA&format=json&addressdetails=1`
@@ -154,18 +161,9 @@ export default function FieldCheckin() {
           const state = addr.state ? addr.state.toUpperCase() : 'USA';
           finalLocationText = `${city.toUpperCase()}, ${state}`;
         }
-      } catch (err) {
-        console.error(err);
       }
-    }
 
-    try {
       if (!currentUser && wantsAccount) {
-        if (!authEmail.trim() || !authPassword.trim()) {
-          setStatusMessage('⚠️ ACCOUNT PROVISIONING REQUIRES BOTH EMAIL AND PASSKEY.');
-          setSubmitting(false);
-          return;
-        }
         setStatusMessage('INKING ACCOUNT CODES...');
         const auth = getAuth();
         const credential = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
@@ -248,19 +246,24 @@ export default function FieldCheckin() {
             {currentUser && userProfile ? (
               <button type="button" onClick={() => getAuth().signOut()} className="text-slate-400 hover:text-slate-200 underline bg-transparent border-0 cursor-pointer p-0">[Sign Out]</button>
             ) : (
-              <button type="button" onClick={() => { setLoginError(''); setIsSignInModalOpen(true); }} className="text-blue-400 hover:text-blue-300 font-black underline bg-transparent border-0 cursor-pointer p-0">Sign In</button>
+              <button type="button" onClick={() => { setIsSignInModalOpen(true); }} className="text-blue-400 hover:text-blue-300 font-black underline bg-transparent border-0 cursor-pointer p-0">Sign In</button>
             )}
           </div>
         </header>
 
+        {/* ACCESS WARNING BLOCK */}
+        {!urlPasscode && (
+          <p className="text-rose-400 font-mono text-[10px] bg-rose-950/20 border border-rose-900/30 rounded-xl p-3 uppercase leading-relaxed text-center font-black">
+            ⚠️ ACCESS ERROR: ENTRY PORTAL GATES UNBOUND. RE-ROUTE CHECK-IN VIA THE CENTRAL SPLASH EMBARKATION DECK.
+          </p>
+        )}
+
         <form onSubmit={handleTransmitTelemetry} className="space-y-4 font-mono text-xs">
-          
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-300 uppercase block tracking-wider">YOUR NAME / SIGN-OFF</label>
             <input type="text" required placeholder="E.G., MARK" value={handlerName} onChange={(e) => setHandlerName(e.target.value)} disabled={!!(currentUser && userProfile)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-black uppercase disabled:opacity-60 disabled:cursor-not-allowed" />
           </div>
 
-          {/* CHECKBOX MATRIX SELECTION BOXES */}
           <div className="space-y-2.5 bg-slate-950/40 border border-slate-900 p-4 rounded-xl">
             <label className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider mb-1">Select Check-in Options (Select all that apply):</label>
             
@@ -324,7 +327,7 @@ export default function FieldCheckin() {
 
           {statusMessage && <p className="text-[10px] text-center uppercase tracking-wider bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-slate-300">{statusMessage}</p>}
 
-          <button type="submit" disabled={submitting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all shadow-lg text-[13px] disabled:opacity-50 cursor-pointer">
+          <button type="submit" disabled={submitting || !urlPasscode} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all shadow-lg text-[13px] disabled:opacity-50 cursor-pointer">
             {submitting ? 'RECORDING LOG DATA...' : 'LOG VOLUME CUSTODY TRANSFER'}
           </button>
         </form>

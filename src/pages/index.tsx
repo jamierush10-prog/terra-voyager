@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db, storage } from '../firebase/config';
-import { collection, onSnapshot, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import dynamic from 'next/dynamic';
@@ -28,6 +28,7 @@ export default function Home() {
   
   const [isCheckinLookupOpen, setIsCheckinLookupOpen] = useState(false);
   const [lookupVoyagerId, setLookupVoyagerId] = useState('');
+  const [lookupPasscode, setLookupPasscode] = useState(''); // NEW INPUT TRACKER
   const [lookupError, setLookupError] = useState('');
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -43,6 +44,7 @@ export default function Home() {
   const [launchOriginCity, setLaunchOriginCity] = useState('');
   const [launchLatitude, setLaunchLatitude] = useState('');
   const [launchLongitude, setLaunchLongitude] = useState('');
+  const [launchPasscode, setLaunchPasscode] = useState(''); // NEW SEED TRACKER
   const [launchImageFile, setLaunchImageFile] = useState<File | null>(null);
   const [launchingAction, setLaunchingAction] = useState(false);
   const [launchError, setLaunchError] = useState('');
@@ -122,18 +124,38 @@ export default function Home() {
     }
   };
 
-  const handleExecuteCheckinRedirect = (e: React.FormEvent) => {
+  // ENFORCED PASSCODE GATING LOGIC AT HUB SPLASH VIEW LEVEL
+  const handleExecuteCheckinRedirect = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetId = lookupVoyagerId.trim().toUpperCase();
-    if (!targetId) return;
+    const enteredPass = lookupPasscode.trim();
+    if (!targetId || !enteredPass) return;
 
-    if (activeVessels[targetId]) {
-      setLookupError('');
-      setIsCheckinLookupOpen(false);
-      setIsEntranceModalOpen(false);
-      router.push(`/mission/${targetId.toLowerCase()}/checkin`);
-    } else {
-      setLookupError(`⚠️ VOLUME ${targetId} IS NOT DEPLOYED IN THE EXPEDITION REGISTRY.`);
+    const missionDocRef = doc(db, 'voyagerMissions', targetId);
+    try {
+      setLookupError('VERIFYING HAND-HELD SECURITY VALUES...');
+      const docSnap = await getDoc(missionDocRef);
+
+      if (docSnap.exists()) {
+        const missionData = docSnap.data();
+        
+        // Strict evaluation matching standard string models
+        if (missionData.passcode && missionData.passcode === enteredPass) {
+          setLookupError('');
+          setLookupPasscode('');
+          setLookupVoyagerId('');
+          setIsCheckinLookupOpen(false);
+          setIsEntranceModalOpen(false);
+          // Forward pass verification parameter safely onto sub-directory contexts
+          router.push(`/mission/${targetId.toLowerCase()}/checkin?passKey=${encodeURIComponent(enteredPass)}`);
+        } else {
+          setLookupError('⚠️ SECURITY PASSCODE REJECTED. CHECK THE COVER PAGE.');
+        }
+      } else {
+        setLookupError(`⚠️ VOLUME ${targetId} IS NOT DEPLOYED IN THE EXPEDITION REGISTRY.`);
+      }
+    } catch (err) {
+      setLookupError('⚠️ SERVER LOG CONTEXT DISCONNECT. PLEASE TRY AGAIN.');
     }
   };
 
@@ -204,7 +226,11 @@ export default function Home() {
   const handleLaunchNewVessel = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetVesselId = launchVoyagerId.trim().toUpperCase();
-    if (!targetVesselId || !launchOriginCity.trim()) return;
+    const finalPasscode = launchPasscode.trim();
+    if (!targetVesselId || !launchOriginCity.trim() || !finalPasscode) {
+      setLaunchError('⚠️ ALL PARAMS INCLUDING PASSCODE REQUIRMENTS SECURED.');
+      return;
+    }
 
     setLaunchingAction(true);
     let finalOriginText = launchOriginCity.trim().toUpperCase();
@@ -239,7 +265,8 @@ export default function Home() {
         latitude: finalLat,
         longitude: finalLng,
         launchImageUrl: uploadedImageUrl,
-        launchDate: new Date().toISOString()
+        launchDate: new Date().toISOString(),
+        passcode: finalPasscode // ENCODED TO DOCUMENT MATRIX STRINGS
       });
 
       await setDoc(doc(collection(db, 'telemetryLogs')), {
@@ -258,6 +285,7 @@ export default function Home() {
       setLaunchOriginCity('');
       setLaunchLatitude('');
       setLaunchLongitude('');
+      setLaunchPasscode('');
       setLaunchImageFile(null);
       setIsLaunchGpsActive(false);
       setLaunchError('');
@@ -361,7 +389,7 @@ export default function Home() {
         </section>
       </main>
 
-      {/* STABILIZED SPLASH GATE ENTRANCE HUB MODAL WITH RE-STYLED BLUE ACTIONS */}
+      {/* CORE SPLASH INTERCEPTOR MODAL WITH PASSCODE COMPLIANCE LABELS */}
       {hasHydrated && isEntranceModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-sm bg-slate-900 border border-slate-800/80 rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl text-center">
@@ -373,50 +401,28 @@ export default function Home() {
 
             {!isCheckinLookupOpen ? (
               <div className="flex flex-col space-y-3">
-                <button 
-                  type="button" 
-                  onClick={() => setIsEntranceModalOpen(false)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
-                >
-                  Explore Project Overview
-                </button>
-
-                {/* LABELED IN ACCORDANCE WITH NEW FIELD METRIC HOOK CRITERIA */}
-                <button 
-                  type="button" 
-                  onClick={() => { setLookupError(''); setIsCheckinLookupOpen(true); }}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
-                >
-                  Log TV Journal Check-In
-                </button>
-
-                {/* LABELED IN ACCORDANCE WITH USER PREFERENCE STYLES */}
-                <button 
-                  type="button" 
-                  onClick={() => { setIsEntranceModalOpen(false); setIsSignUpMode(true); setAuthActionError(''); setIsAuthModalOpen(true); }}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
-                >
-                  Create a User Account
-                </button>
+                <button type="button" onClick={() => setIsEntranceModalOpen(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0">Explore Project Overview</button>
+                <button type="button" onClick={() => { setLookupError(''); setIsCheckinLookupOpen(true); }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0">Log TV Journal Check-In</button>
+                <button type="button" onClick={() => { setIsEntranceModalOpen(false); setIsSignUpMode(true); setAuthActionError(''); setIsAuthModalOpen(true); }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0">Create a User Account</button>
               </div>
             ) : (
+              /* SECURED LOOKUP SUBFORM SYSTEM */
               <form onSubmit={handleExecuteCheckinRedirect} className="space-y-4 text-left">
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-slate-400 block uppercase tracking-widest">Input Active Volume Identification Code:</label>
-                  <input 
-                    type="text" 
-                    required 
-                    autoFocus 
-                    placeholder="E.G. TV-01" 
-                    value={lookupVoyagerId} 
-                    onChange={(e) => setLookupVoyagerId(e.target.value)} 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white uppercase text-center font-black text-sm tracking-widest focus:outline-none focus:border-blue-500" 
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 block uppercase tracking-widest mb-1">Journal Code:</label>
+                    <input type="text" required placeholder="E.G. TV-01" value={lookupVoyagerId} onChange={(e) => setLookupVoyagerId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white uppercase text-center font-black tracking-widest focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    {/* ENFORCED PHYSICAL PASSCODE INPUT ENTRY BLOCK */}
+                    <label className="text-[9px] font-black text-slate-400 block uppercase tracking-widest mb-1">Hand-Written Passcode:</label>
+                    <input type="text" required placeholder="READ FROM INSIDE JOURNAL COVER" value={lookupPasscode} onChange={(e) => setLookupPasscode(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-center font-black focus:outline-none focus:border-blue-500 tracking-wide" />
+                  </div>
                 </div>
-                {lookupError && <p className="text-rose-400 text-[9px] text-center uppercase font-bold leading-normal">{lookupError}</p>}
+                {lookupError && <p className="text-rose-400 text-[9px] text-center uppercase font-black leading-normal">{lookupError}</p>}
                 <div className="grid grid-cols-2 gap-2 pt-1 font-bold text-[10px]">
-                  <button type="button" onClick={() => { setIsCheckinLookupOpen(false); setLookupVoyagerId(''); setLookupError(''); }} className="w-full bg-slate-950 border border-slate-850 hover:bg-slate-900 text-slate-400 uppercase p-3 rounded-lg cursor-pointer text-center">[Back]</button>
-                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white uppercase p-3 rounded-lg cursor-pointer text-center">Open Portal →</button>
+                  <button type="button" onClick={() => { setIsCheckinLookupOpen(false); setLookupVoyagerId(''); setLookupPasscode(''); setLookupError(''); }} className="w-full bg-slate-950 border border-slate-850 hover:bg-slate-900 text-slate-400 uppercase p-3 rounded-lg cursor-pointer text-center">[Back]</button>
+                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white uppercase p-3 rounded-lg cursor-pointer text-center">Verify & Open →</button>
                 </div>
               </form>
             )}
@@ -424,30 +430,27 @@ export default function Home() {
         </div>
       )}
 
-      {/* ADMIN LAUNCH ENTRY MODAL */}
+      {/* ADMIN DEPLOYMENT TERMINAL WITH NEW PASSCODE GENERATOR CONFIGURATION */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
             <h3 className="text-sm font-black uppercase text-center text-white tracking-widest">BIND & DEPLOY JOURNAL VOLUME {launchVoyagerId}</h3>
             
             <div className="bg-slate-950/40 border border-slate-850 p-1 rounded-xl">
-              <button 
-                type="button" 
-                onClick={handleRequestLaunchLocation} 
-                className={`w-full font-bold uppercase py-3 px-4 rounded-xl tracking-wider transition-all text-xs cursor-pointer border ${
-                  isLaunchGpsActive 
-                    ? 'bg-blue-950/40 border-blue-500 text-blue-400' 
-                    : 'bg-slate-950 border-slate-800 text-slate-200 hover:bg-slate-900'
-                }`}
-              >
-                {isLaunchGpsActive ? '✓ LAUNCH COORDINATES LOCKED' : '📍 Use Current Device Location'}
-              </button>
+              <button type="button" onClick={handleRequestLaunchLocation} className={`w-full font-bold uppercase py-3 px-4 rounded-xl tracking-wider transition-all text-xs cursor-pointer border ${isLaunchGpsActive ? 'bg-blue-950/40 border-blue-500 text-blue-400' : 'bg-slate-950 border border-slate-800 text-slate-200 hover:bg-slate-900'}`}>{isLaunchGpsActive ? '✓ LAUNCH COORDINATES LOCKED' : '📍 Use Current Device Location'}</button>
             </div>
 
             <form onSubmit={handleLaunchNewVessel} className="space-y-4 text-xs">
-              <div>
-                <label className="text-[10px] font-black text-slate-300 block mb-1 uppercase tracking-wider">Launch Location</label>
-                <input type="text" required placeholder="e.g. DAPHNE, AL or ZIP Code" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500 uppercase" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black text-slate-300 block mb-1 uppercase tracking-wider">Launch Location</label>
+                  <input type="text" required placeholder="e.g. DAPHNE, AL" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500 uppercase" />
+                </div>
+                <div>
+                  {/* INJECTED TARGET SEED PASSCODE FOR PRINTING */}
+                  <label className="text-[10px] font-black text-slate-300 block mb-1 uppercase tracking-wider">Secure Passcode</label>
+                  <input type="text" required placeholder="e.g. PISTON2026" value={launchPasscode} onChange={(e) => setLaunchPasscode(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-black tracking-wide focus:outline-none focus:border-blue-500" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input type="text" placeholder="LATITUDE (OPTIONAL)" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500" />
@@ -458,9 +461,7 @@ export default function Home() {
                 <input type="file" accept="image/*" onChange={(e) => setLaunchImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
               </div>
               {launchError && <p className="text-blue-400 text-[10px] text-center uppercase bg-blue-950/20 border border-blue-900/30 p-2.5 rounded-xl">📌 {launchError}</p>}
-              <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 py-3 rounded-xl font-black text-white uppercase tracking-widest disabled:opacity-50 cursor-pointer">
-                {launchingAction ? 'INITIALIZING CHRONICLE LAYER...' : 'INITIALIZE VOLUME CHRONICLE'}
-              </button>
+              <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest py-3.5 rounded-xl disabled:opacity-50 cursor-pointer">{launchingAction ? 'INITIALIZING CHRONICLE LAYER...' : 'INITIALIZE VOLUME CHRONICLE'}</button>
             </form>
           </div>
         </div>
@@ -483,9 +484,7 @@ export default function Home() {
               <button type="submit" disabled={authActionLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all disabled:opacity-50 cursor-pointer">{authActionLoading ? 'PROCESSING...' : isSignUpMode ? 'CREATE PROFILE' : 'VERIFY KEY'}</button>
             </form>
             <div className="border-t border-slate-800 pt-4 flex flex-col space-y-2 text-[10px] text-center">
-              <button type="button" onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthActionError(''); }} className="text-blue-400 hover:underline uppercase bg-transparent border-0 cursor-pointer font-bold">
-                {isSignUpMode ? '[Returning Handlers Log In]' : 'Create an account to follow the journal\'s travel'}
-              </button>
+              <button type="button" onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthActionError(''); }} className="text-blue-400 hover:underline uppercase bg-transparent border-0 cursor-pointer font-bold">{isSignUpMode ? '[Returning Handlers Log In]' : 'Create an account to follow the journal\'s travel'}</button>
               <button type="button" onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-200 uppercase bg-transparent border-0 cursor-pointer tracking-wider text-[9px]">[Cancel]</button>
             </div>
           </div>
