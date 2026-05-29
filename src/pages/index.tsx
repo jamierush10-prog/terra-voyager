@@ -22,6 +22,7 @@ export default function Home() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  // ENTRANCE HUB & HYDRATION STATES
   const [isEntranceModalOpen, setIsEntranceModalOpen] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   
@@ -49,19 +50,18 @@ export default function Home() {
   const [launchError, setLaunchError] = useState('');
   const [isLaunchGpsActive, setIsLaunchGpsActive] = useState(false);
 
-  // CONFIGURE THIN RED BALL MARKER VECTOR
+  // THIN RED MARKER PIN CONFIGURATION
   const [customRedIcon, setCustomRedIcon] = useState<any>(null);
 
   useEffect(() => {
     setHasHydrated(true);
     setIsEntranceModalOpen(true);
 
-    // Initialize custom icon inside browser runtime scope
     const L = require('leaflet');
     const redPinInstance = new L.Icon({
-      iconUrl: 'https://cdn-icons-png.flaticon.com/512/9131/9131546.png', // Crisp, thin red mapping pin with red round ball
+      iconUrl: 'https://cdn-icons-png.flaticon.com/512/9131/9131546.png', 
       iconSize: [36, 36],
-      iconAnchor: [18, 36], // Center bottom point anchors perfectly to coordinate vector
+      iconAnchor: [18, 36], 
       popupAnchor: [0, -32],
     });
     setCustomRedIcon(redPinInstance);
@@ -333,6 +333,7 @@ export default function Home() {
           ) : currentUser && userProfile ? (
             <div className="flex items-center space-x-4">
               <span className="text-white font-black">{userProfile.username}</span>
+              <Link href="/chat" className="text-blue-400 font-black hover:underline">[COMMUNICATIONS DECK]</Link>
               {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[EDIT CONTROL]</Link>}
               <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
             </div>
@@ -347,7 +348,6 @@ export default function Home() {
           <MapContainer center={[37.0902, -95.7129]} zoom={4} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
             {activeMapMarkers.map((pin: any) => (
-              /* APPLIED CUSTOM THIN RED PIN DESIGN */
               <Marker key={pin.vesselId} position={[pin.lat, pin.lng]} icon={customRedIcon || undefined}>
                 <Popup>
                   <div className="text-slate-900 font-mono text-xs font-bold p-1">
@@ -407,6 +407,7 @@ export default function Home() {
         </section>
       </main>
 
+      {/* STABILIZED ENTRANCE SPLASH GATE INTERCEPTOR OVERLAY */}
       {hasHydrated && isEntranceModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-sm bg-slate-900 border border-slate-800/80 rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl text-center">
@@ -418,9 +419,29 @@ export default function Home() {
 
             {!isCheckinLookupOpen ? (
               <div className="flex flex-col space-y-3">
-                <button type="button" onClick={() => setIsEntranceModalOpen(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0">Explore Project Overview</button>
-                <button type="button" onClick={() => { setLookupError(''); setIsCheckinLookupOpen(true); }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0">Log TV Journal Check-In</button>
-                <button type="button" onClick={() => { setIsEntranceModalOpen(false); setIsSignUpMode(true); setAuthActionError(''); setIsAuthModalOpen(true); }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0">Create a User Account</button>
+                <button 
+                  type="button" 
+                  onClick={() => setIsEntranceModalOpen(false)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
+                >
+                  Explore Project Overview
+                </button>
+
+                <button 
+                  type="button" 
+                  onClick={() => { setLookupError(''); setIsCheckinLookupOpen(true); }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
+                >
+                  Log TV Journal Check-In
+                </button>
+
+                <button 
+                  type="button" 
+                  onClick={() => { setIsEntranceModalOpen(false); setIsSignUpMode(true); setAuthActionError(''); setIsAuthModalOpen(true); }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
+                >
+                  Create a User Account
+                </button>
               </div>
             ) : (
               <form onSubmit={handleExecuteCheckinRedirect} className="space-y-4 text-left">
