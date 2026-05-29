@@ -14,13 +14,11 @@ export default function FieldCheckin() {
   const [reportedLocation, setReportedLocation] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   
-  // MULTI-SELECT CHECKBOX STATES
+  // UPDATED: MULTI-SELECT CHECKBOX STATES (COMPLETED REMOVED)
   const [optReceived, setOptReceived] = useState(false);
-  const [optCompleted, setOptCompleted] = useState(false);
   const [optPassedOn, setOptPassedOn] = useState(false);
   const [optRoutine, setOptRoutine] = useState(false);
   
-  // CONDITIONAL HAND-OFF RECIPIENT
   const [recipientName, setRecipientName] = useState('');
 
   // USER REGISTRATION STATES
@@ -42,7 +40,6 @@ export default function FieldCheckin() {
   const [longitude, setLongitude] = useState('');
   const [isGpsActive, setIsGpsActive] = useState(false);
 
-  // TRACK AUTHENTICATION MATRIX STATE
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
 
@@ -57,7 +54,6 @@ export default function FieldCheckin() {
           if (!snap.empty) {
             const profileData = snap.docs[0].data();
             setUserProfile(profileData);
-            // AUTO-POPULATE NAME IF SIGNED IN
             if (profileData.username) {
               setHandlerName(profileData.username.toUpperCase());
             }
@@ -126,7 +122,7 @@ export default function FieldCheckin() {
     e.preventDefault();
     if (!voyagerId || !handlerName.trim() || !reportedLocation.trim()) return;
 
-    if (!optReceived && !optCompleted && !optPassedOn && !optRoutine) {
+    if (!optReceived && !optPassedOn && !optRoutine) {
       setStatusMessage('⚠️ PLEASE SELECT AT LEAST ONE CHECK-IN OPTION FROM THE LIST.');
       return;
     }
@@ -164,7 +160,6 @@ export default function FieldCheckin() {
     }
 
     try {
-      // ONLY ATTEMPT TO SIGN UP USERS IF NOT ALREADY LOGGED IN
       if (!currentUser && wantsAccount) {
         if (!authEmail.trim() || !authPassword.trim()) {
           setStatusMessage('⚠️ ACCOUNT PROVISIONING REQUIRES BOTH EMAIL AND PASSKEY.');
@@ -193,7 +188,6 @@ export default function FieldCheckin() {
 
       let actionsList: string[] = [];
       if (optReceived) actionsList.push("POSSESSION INITIALIZED");
-      if (optCompleted) actionsList.push("ENTRY COMPLETED");
       if (optPassedOn) actionsList.push(`TRANSFERRED CUSTODY${recipientName ? ` TO ${recipientName.trim().toUpperCase()}` : ''}`);
       if (optRoutine) actionsList.push("ROUTING UPDATE");
 
@@ -209,7 +203,6 @@ export default function FieldCheckin() {
         verified: false,
         journalOptions: {
           tookPossession: optReceived,
-          entryCompleted: optCompleted,
           passedPossession: optPassedOn,
           recipient: recipientName.trim().toUpperCase() || null,
           routineUpdate: optRoutine
@@ -251,8 +244,6 @@ export default function FieldCheckin() {
             <h1 className="text-2xl font-black tracking-widest uppercase text-white leading-none">JOURNAL PORTAL</h1>
             <p className="text-[10px] font-mono text-emerald-400 font-black uppercase tracking-widest mt-1">FIELD CUSTODY TERMINAL // {voyagerId || 'SYNCING...'}</p>
           </div>
-          
-          {/* CONDITIONALLY RENDER INLINE SIGN IN ACTION OR SIGNOUT INDICATOR */}
           <div className="font-mono text-[10px] uppercase">
             {currentUser && userProfile ? (
               <button type="button" onClick={() => getAuth().signOut()} className="text-slate-400 hover:text-slate-200 underline bg-transparent border-0 cursor-pointer p-0">[Sign Out]</button>
@@ -276,11 +267,6 @@ export default function FieldCheckin() {
             <label className="flex items-start space-x-3 cursor-pointer select-none py-0.5">
               <input type="checkbox" checked={optReceived} onChange={(e) => setOptReceived(e.target.checked)} className="w-4 h-4 accent-blue-500 bg-slate-900 border-slate-800 rounded cursor-pointer mt-0.5" />
               <span className="text-[11px] font-medium text-slate-200">I have taken initial possession of this journal</span>
-            </label>
-
-            <label className="flex items-start space-x-3 cursor-pointer select-none py-0.5">
-              <input type="checkbox" checked={optCompleted} onChange={(e) => setOptCompleted(e.target.checked)} className="w-4 h-4 accent-blue-500 bg-slate-900 border-slate-800 rounded cursor-pointer mt-0.5" />
-              <span className="text-[11px] font-medium text-slate-200">Handwritten journal entry is completed</span>
             </label>
 
             <label className="flex items-start space-x-3 cursor-pointer select-none py-0.5">
@@ -320,7 +306,6 @@ export default function FieldCheckin() {
             <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded-md file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
           </div>
 
-          {/* DYNAMICALLY REMOVE CREATE ACCOUNT LAYER IF USER ALREADY LOGGED IN */}
           {!currentUser && (
             <div className="bg-slate-950/80 border border-slate-850 p-3.5 rounded-xl space-y-3 mt-2">
               <label className="flex items-center space-x-3 cursor-pointer select-none">
