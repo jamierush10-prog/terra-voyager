@@ -4,6 +4,7 @@ import { collection, onSnapshot, doc, setDoc, query, where, getDocs } from 'fire
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
 
 const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
@@ -12,6 +13,7 @@ const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), 
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
 
 export default function Home() {
+  const router = useRouter();
   const [activeVessels, setActiveVessels] = useState<Record<string, any>>({});
   const [telemetryLogs, setTelemetryLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +21,14 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  // ENTRANCE HUB & ROBUST HYDRATION TIMING STATES
+  const [isEntranceModalOpen, setIsEntranceModalOpen] = useState(false);
+  const [hasHydrated, setHasHydrated] = useState(false);
+  
+  const [isCheckinLookupOpen, setIsCheckinLookupOpen] = useState(false);
+  const [lookupVoyagerId, setLookupVoyagerId] = useState('');
+  const [lookupError, setLookupError] = useState('');
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
@@ -37,6 +47,12 @@ export default function Home() {
   const [launchingAction, setLaunchingAction] = useState(false);
   const [launchError, setLaunchError] = useState('');
   const [isLaunchGpsActive, setIsLaunchGpsActive] = useState(false);
+
+  // SECURE CLIENT CONTAINER HYDRATION MOUNT
+  useEffect(() => {
+    setHasHydrated(true);
+    setIsEntranceModalOpen(true);
+  }, []);
 
   useEffect(() => {
     const mCollection = collection(db, 'voyagerMissions');
@@ -104,6 +120,21 @@ export default function Home() {
         },
         { enableHighAccuracy: true, timeout: 8000 }
       );
+    }
+  };
+
+  const handleExecuteCheckinRedirect = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetId = lookupVoyagerId.trim().toUpperCase();
+    if (!targetId) return;
+
+    if (activeVessels[targetId]) {
+      setLookupError('');
+      setIsCheckinLookupOpen(false);
+      setIsEntranceModalOpen(false);
+      router.push(`/mission/${targetId.toLowerCase()}/checkin`);
+    } else {
+      setLookupError(`⚠️ VOLUME ${targetId} IS NOT DEPLOYED IN THE EXPEDITION REGISTRY.`);
     }
   };
 
@@ -214,7 +245,6 @@ export default function Home() {
 
       await setDoc(doc(collection(db, 'telemetryLogs')), {
         voyagerId: targetVesselId,
-        // UPDATED: 'ARCHIVE CONSOLE' -> 'LAUNCH BASE'
         handlerName: 'LAUNCH BASE',
         reportedLocation: `LAUNCH LOCATION: ${finalOriginText}`,
         latitude: finalLat,
@@ -223,7 +253,6 @@ export default function Home() {
         timestamp: new Date(),
         verified: true,
         isLaunchPad: true,
-        // UPDATED: Dynamically records action tracking context format strings
         displayActionContext: `${targetVesselId} LAUNCHED`
       });
 
@@ -333,6 +362,68 @@ export default function Home() {
         </section>
       </main>
 
+      {/* FIXED AND STABILIZED CLIENT-SIDE SPLASH GATE ENTRY MODAL */}
+      {hasHydrated && isEntranceModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-50 flex items-center justify-center p-4 font-mono">
+          <div className="w-full max-w-sm bg-slate-900 border border-slate-800/80 rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl text-center">
+            <header className="space-y-2">
+              <span className="text-3xl block">🌍</span>
+              <h2 className="text-sm font-black uppercase text-white tracking-widest">THE TRAVELING JOURNAL</h2>
+              <p className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Expedition Entry Matrix Terminal</p>
+            </header>
+
+            {!isCheckinLookupOpen ? (
+              <div className="flex flex-col space-y-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsEntranceModalOpen(false)}
+                  className="w-full bg-slate-950 border border-slate-800 hover:bg-slate-900 text-slate-100 font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center"
+                >
+                  Explore Project Overview
+                </button>
+
+                <button 
+                  type="button" 
+                  onClick={() => { setLookupError(''); setIsCheckinLookupOpen(true); }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md"
+                >
+                  Log Active Volume Check-In
+                </button>
+
+                <button 
+                  type="button" 
+                  onClick={() => { setIsEntranceModalOpen(false); setIsSignUpMode(true); setAuthActionError(''); setIsAuthModalOpen(true); }}
+                  className="w-full bg-transparent text-blue-400 hover:underline font-bold text-[10px] uppercase tracking-wider pt-2 cursor-pointer border-0"
+                >
+                  [Enlist New Custodian Profile]
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleExecuteCheckinRedirect} className="space-y-4 text-left">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-slate-400 block uppercase tracking-widest">Input Active Volume Identification Code:</label>
+                  <input 
+                    type="text" 
+                    required 
+                    autoFocus 
+                    placeholder="E.G. TV-01" 
+                    value={lookupVoyagerId} 
+                    onChange={(e) => setLookupVoyagerId(e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white uppercase text-center font-black text-sm tracking-widest focus:outline-none focus:border-blue-500" 
+                  />
+                </div>
+                {lookupError && <p className="text-rose-400 text-[9px] text-center uppercase font-bold leading-normal">{lookupError}</p>}
+                <div className="grid grid-cols-2 gap-2 pt-1 font-bold text-[10px]">
+                  <button type="button" onClick={() => { setIsCheckinLookupOpen(false); setLookupVoyagerId(''); setLookupError(''); }} className="w-full bg-slate-950 border border-slate-850 hover:bg-slate-900 text-slate-400 uppercase p-3 rounded-lg cursor-pointer text-center">[Back]</button>
+                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white uppercase p-3 rounded-lg cursor-pointer text-center">Open Portal →</button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ADMIN LAUNCH ENTRY MODAL */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
