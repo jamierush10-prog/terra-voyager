@@ -373,7 +373,6 @@ export default function Home() {
 
             {!isCheckinLookupOpen ? (
               <div className="flex flex-col space-y-3">
-                {/* BUTTON 1: RE-STYLED TO SOLID HIGH-CONTRAST BLUE */}
                 <button 
                   type="button" 
                   onClick={() => setIsEntranceModalOpen(false)}
@@ -382,22 +381,22 @@ export default function Home() {
                   Explore Project Overview
                 </button>
 
-                {/* BUTTON 2: LOG CUSTODY CHECK-IN */}
+                {/* LABELED IN ACCORDANCE WITH NEW FIELD METRIC HOOK CRITERIA */}
                 <button 
                   type="button" 
                   onClick={() => { setLookupError(''); setIsCheckinLookupOpen(true); }}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
                 >
-                  Log Active Volume Check-In
+                  Log TV Journal Check-In
                 </button>
 
-                {/* BUTTON 3: RE-STYLED FROM LINK TEXT TO MATCHING SOLID BLUE ELEMENT BUTTON */}
+                {/* LABELED IN ACCORDANCE WITH USER PREFERENCE STYLES */}
                 <button 
                   type="button" 
                   onClick={() => { setIsEntranceModalOpen(false); setIsSignUpMode(true); setAuthActionError(''); setIsAuthModalOpen(true); }}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
                 >
-                  Create a New Account
+                  Create a User Account
                 </button>
               </div>
             ) : (
