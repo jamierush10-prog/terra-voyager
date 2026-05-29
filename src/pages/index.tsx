@@ -214,14 +214,17 @@ export default function Home() {
 
       await setDoc(doc(collection(db, 'telemetryLogs')), {
         voyagerId: targetVesselId,
-        handlerName: 'ARCHIVE CONSOLE',
+        // UPDATED: 'ARCHIVE CONSOLE' -> 'LAUNCH BASE'
+        handlerName: 'LAUNCH BASE',
         reportedLocation: `LAUNCH LOCATION: ${finalOriginText}`,
         latitude: finalLat,
         longitude: finalLng,
         imageUrl: uploadedImageUrl,
         timestamp: new Date(),
         verified: true,
-        isLaunchPad: true
+        isLaunchPad: true,
+        // UPDATED: Dynamically records action tracking context format strings
+        displayActionContext: `${targetVesselId} LAUNCHED`
       });
 
       setLaunchOriginCity('');
@@ -330,13 +333,11 @@ export default function Home() {
         </section>
       </main>
 
-      {/* ADMIN LAUNCH MODAL - FIXED AND RENDERED DEVICE LOCATION BUTTON */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
             <h3 className="text-sm font-black uppercase text-center text-white tracking-widest">BIND & DEPLOY JOURNAL VOLUME {launchVoyagerId}</h3>
             
-            {/* RENDERED: The location request button layout segment above the input parameters */}
             <div className="bg-slate-950/40 border border-slate-850 p-1 rounded-xl">
               <button 
                 type="button" 
@@ -365,7 +366,7 @@ export default function Home() {
                 <input type="file" accept="image/*" onChange={(e) => setLaunchImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
               </div>
               {launchError && <p className="text-blue-400 text-[10px] text-center uppercase bg-blue-950/20 border border-blue-900/30 p-2.5 rounded-xl">📌 {launchError}</p>}
-              <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest py-3.5 rounded-xl disabled:opacity-50 cursor-pointer">
+              <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 py-3 rounded-xl font-black text-white uppercase tracking-widest disabled:opacity-50 cursor-pointer">
                 {launchingAction ? 'INITIALIZING CHRONICLE LAYER...' : 'INITIALIZE VOLUME CHRONICLE'}
               </button>
             </form>

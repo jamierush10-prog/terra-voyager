@@ -132,13 +132,15 @@ export default function MissionControl() {
     if (!isNaN(lastLat) && !isNaN(lastLng)) {
       timeline.push({
         id: 'LAUNCH',
-        handlerName: 'ARCHIVE BASE',
+        // UPDATED: 'ARCHIVE BASE' -> 'LAUNCH BASE'
+        handlerName: 'LAUNCH BASE',
         reportedLocation: `LAUNCH LOCATION: ${vesselData.originCity}`,
         latitude: lastLat,
         longitude: lastLng,
         timestamp: lastTimeMs,
         isLaunchPad: true,
-        displayActionContext: "PROLOGUE INITIALIZED"
+        // UPDATED: Standardizes display strings for baseline deployment nodes
+        displayActionContext: `${uppercaseId} LAUNCHED`
       });
     }
 
@@ -265,7 +267,6 @@ export default function MissionControl() {
           <div className="w-full xl:w-auto">
             <Link href="/" className="text-xs font-mono font-black text-slate-400 hover:text-blue-400 tracking-widest block mb-1">🌍 JOURNAL PORTAL</Link>
             <h1 className="text-3xl font-black text-slate-100 uppercase mt-1">{uppercaseId}</h1>
-            {/* REMOVED PAGE OVERAL MAX TARGET INDICATION VALUE HERE */}
             <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">VOLUME LEDGER CHRONICLE: {vesselData?.originCity || 'PARSING...'}</p>
           </div>
           
@@ -343,6 +344,7 @@ export default function MissionControl() {
                   className="p-4 rounded-xl border bg-slate-900/50 border-slate-900 hover:border-blue-500/50 hover:bg-slate-900 cursor-pointer transition-all group"
                 >
                   <div className="flex justify-between items-center font-mono text-xs gap-3">
+                    {/* DISPLAY CHANGES WILL REFLECT LIVE IN HANDLER CODES */}
                     <span className="text-slate-200 font-bold group-hover:text-blue-400 transition-colors">Journal in possession of: <span className={`${point.isTimeout ? 'text-amber-400 font-black' : 'text-white font-black'}`}>{point.handlerName}</span></span>
                     <span className={`px-2.5 py-1 rounded text-white font-bold uppercase border text-[11px] truncate ${point.isTimeout ? 'bg-amber-950/60 border-amber-800/40 text-amber-400' : 'bg-slate-950 border-slate-800'}`}>{point.reportedLocation}</span>
                   </div>
