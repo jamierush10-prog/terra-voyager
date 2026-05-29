@@ -16,12 +16,10 @@ export default function Home() {
   const [telemetryLogs, setTelemetryLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // AUTH STATES
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // MODAL STATES
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
@@ -33,7 +31,6 @@ export default function Home() {
   const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false);
   const [launchVoyagerId, setLaunchVoyagerId] = useState('');
   const [launchOriginCity, setLaunchOriginCity] = useState('');
-  const [launchLifecycleTarget, setLaunchLifecycleTarget] = useState('21'); 
   const [launchLatitude, setLaunchLatitude] = useState('');
   const [launchLongitude, setLaunchLongitude] = useState('');
   const [launchImageFile, setLaunchImageFile] = useState<File | null>(null);
@@ -126,34 +123,20 @@ export default function Home() {
   };
 
   const processVesselStats = (vesselId: string, baselineData: any) => {
-    if (!baselineData) return { count: 0, target: 21, isMissing: false, isComplete: false, lastPin: null };
+    if (!baselineData) return { count: 0, lastPin: null };
 
-    const targetLimit = parseInt(baselineData.lifecycleTarget) || 21;
     const vesselLogs = telemetryLogs
       .filter(log => log.voyagerId && log.voyagerId.toUpperCase() === vesselId.toUpperCase())
       .sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
 
-    let totalCheckins = 0;
-    let currentTimeMs = new Date().getTime();
-    let lastEventTimeMs = baselineData.launchDate ? new Date(baselineData.launchDate).getTime() : currentTimeMs;
+    // FILTER STATE COUNTER TO ONLY MAP EXPLICIT POSSESSION LOG TYPES
+    const explicitPossessions = vesselLogs.filter(log => log.journalOptions?.tookPossession === true).length;
     
     let currentLat = parseFloat(baselineData.latitude);
     let currentLng = parseFloat(baselineData.longitude);
     let label = `PROLOGUE LAYER: ${baselineData.originCity}`;
 
     vesselLogs.forEach((log) => {
-      const logTimeMs = log.timestamp?.toDate ? log.timestamp.toDate().getTime() : new Date(log.timestamp).getTime();
-      
-      while (logTimeMs - lastEventTimeMs > 30 * 24 * 60 * 60 * 1000) {
-        totalCheckins++;
-        lastEventTimeMs += 30 * 24 * 60 * 60 * 1000;
-      }
-
-      if (!log.isLaunchPad) {
-        totalCheckins++;
-      }
-      
-      lastEventTimeMs = logTimeMs;
       const pLat = parseFloat(log.latitude);
       const pLng = parseFloat(log.longitude);
       if (!isNaN(pLat) && !isNaN(pLng)) {
@@ -163,19 +146,8 @@ export default function Home() {
       }
     });
 
-    while (currentTimeMs - lastEventTimeMs > 30 * 24 * 60 * 60 * 1000) {
-      totalCheckins++;
-      lastEventTimeMs += 30 * 24 * 60 * 60 * 1000;
-    }
-
-    const timeSinceLastEvent = currentTimeMs - lastEventTimeMs;
-    const isMissing = timeSinceLastEvent > (25 * 24 * 60 * 60 * 1000) && totalCheckins < targetLimit;
-
     return {
-      count: totalCheckins,
-      target: targetLimit,
-      isMissing,
-      isComplete: totalCheckins >= targetLimit,
+      count: explicitPossessions,
       lastPin: { lat: currentLat, lng: currentLng, label }
     };
   };
@@ -183,7 +155,6 @@ export default function Home() {
   const handleLaunchNewVessel = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetVesselId = launchVoyagerId.trim().toUpperCase();
-    const cleanTargetLimit = parseInt(launchLifecycleTarget.trim()) || 21;
     if (!targetVesselId || !launchOriginCity.trim()) return;
 
     setLaunchingAction(true);
@@ -216,7 +187,6 @@ export default function Home() {
       await setDoc(doc(db, 'voyagerMissions', targetVesselId), {
         missionId: targetVesselId,
         originCity: finalOriginText,
-        lifecycleTarget: cleanTargetLimit, 
         latitude: finalLat,
         longitude: finalLng,
         launchImageUrl: uploadedImageUrl,
@@ -236,7 +206,6 @@ export default function Home() {
       });
 
       setLaunchOriginCity('');
-      setLaunchLifecycleTarget('21');
       setLaunchLatitude('');
       setLaunchLongitude('');
       setLaunchImageFile(null);
@@ -256,7 +225,6 @@ export default function Home() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-      {/* FIXED JOURNAL PORTAL HEADER BAR */}
       <header className="p-4 border-b border-slate-900 bg-slate-900/40 backdrop-blur shrink-0 z-40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl font-black tracking-widest text-slate-100 uppercase">THE TRAVELING JOURNAL PROJECT</h1>
@@ -272,7 +240,6 @@ export default function Home() {
               <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
             </div>
           ) : (
-            /* CLEAN "SIGN IN" ENTRY ANCHOR LINK WHEN UN-AUTHENTICATED */
             <button onClick={() => { setIsSignUpMode(false); setAuthActionError(''); setIsAuthModalOpen(true); }} className="text-blue-400 hover:text-blue-300 font-black tracking-widest uppercase transition-all bg-transparent border-0 cursor-pointer p-0">Sign In</button>
           )}
         </div>
@@ -301,8 +268,6 @@ export default function Home() {
             <h2 className="text-xs font-mono font-black text-slate-100 uppercase tracking-widest">VOLUME LIFE EXPEDITION REGISTRY</h2>
             <div className="flex items-center space-x-3 font-mono text-[9px] font-bold uppercase text-slate-300">
               <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 block"></span><span>Active Logs</span></div>
-              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 block"></span><span>MIA</span></div>
-              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block"></span><span>Completed</span></div>
             </div>
           </div>
 
@@ -314,19 +279,16 @@ export default function Home() {
                 {fleetRegistryIds.map((id) => {
                   const baseline = activeVessels[id];
                   const isDeployed = !!baseline;
-                  const { count, target, isMissing, isComplete } = processVesselStats(id, baseline);
+                  const { count } = processVesselStats(id, baseline);
 
                   return isDeployed ? (
                     <Link 
                       key={id} href={`/mission/${id.toLowerCase()}`}
-                      className={`border-2 rounded-xl p-2.5 text-center transition-all flex flex-col items-center justify-center cursor-pointer ${
-                        isComplete ? 'bg-emerald-950/40 border-emerald-500 hover:bg-emerald-900/40 shadow-md' :
-                        isMissing ? 'bg-yellow-950/40 border-yellow-500 hover:bg-yellow-950/70 shadow-md' :
-                        'bg-blue-950/80 border-blue-500 hover:bg-blue-900 shadow-md'
-                      }`}
+                      className="border-2 rounded-xl p-2.5 text-center transition-all flex flex-col items-center justify-center cursor-pointer bg-blue-950/80 border-blue-500 hover:bg-blue-900 shadow-md"
                     >
                       <span className="text-[13px] font-mono font-black text-white tracking-wider">{id}</span>
-                      <span className="text-[10px] font-mono font-bold text-slate-300">{count}/{target} pgs</span>
+                      {/* UPDATED TO OUTPUT ONLY CLEAN PLAIN COUNT INSTEAD OF STRIDED MAXIMUMS */}
+                      <span className="text-[10px] font-mono font-bold text-slate-300">{count} transfer{count !== 1 ? 's' : ''}</span>
                     </Link>
                   ) : isAdmin ? (
                     <button 
@@ -348,21 +310,16 @@ export default function Home() {
         </section>
       </main>
 
-      {/* BOOK BINDING ADMINISTRATIVE TERMINAL */}
+      {/* ADMIN BINDING WINDOW MODAL */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
             <h3 className="text-sm font-black uppercase text-center text-white tracking-widest">BIND & DEPLOY JOURNAL VOLUME {launchVoyagerId}</h3>
             <form onSubmit={handleLaunchNewVessel} className="space-y-4 text-xs">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Initial Prologue Location</label>
-                  <input type="text" required placeholder="e.g. 36526" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Page Target</label>
-                  <input type="number" required min="1" max="110" value={launchLifecycleTarget} onChange={(e) => setLaunchLifecycleTarget(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold text-center focus:outline-none focus:border-blue-500" />
-                </div>
+              <div>
+                {/* REMOVED TARGET CAPACITY SLIDERS ENTIRELY; LEAVING JUST LAUNCH SEED SPECIFICATION */}
+                <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Initial Prologue Location</label>
+                <input type="text" required placeholder="e.g. DAPHNE, AL or ZIP Code" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input type="text" placeholder="LATITUDE (OPTIONAL)" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500" />
@@ -379,12 +336,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* VERIFY / CREATE ACCOUNT SECURE SYSTEM MODAL */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-2xl relative">
             <header className="text-center space-y-1.5">
-              <h2 className="text-sm font-black tracking-widest text-white uppercase">{isSignUpMode ? 'Create Account' : 'Identity Verification'}</h2>
+              <h2 className="text-sm font-black uppercase text-white tracking-wider">{isSignUpMode ? 'Create Account' : 'Identity Verification'}</h2>
               <p className="text-[9px] text-slate-400 uppercase tracking-wider">{isSignUpMode ? 'Register profile codes' : 'Input verification passkey'}</p>
             </header>
             <form onSubmit={handleAuthAction} className="space-y-4">
@@ -396,8 +352,6 @@ export default function Home() {
               {authActionError && <p className="text-rose-400 text-[10px] text-center uppercase tracking-wide bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {authActionError}</p>}
               <button type="submit" disabled={authActionLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all disabled:opacity-50 cursor-pointer">{authActionLoading ? 'PROCESSING...' : isSignUpMode ? 'CREATE PROFILE' : 'VERIFY KEY'}</button>
             </form>
-            
-            {/* CUSTODIAN ACCOUNT PROVISION HOOK LINKS */}
             <div className="border-t border-slate-800 pt-4 flex flex-col space-y-2 text-[10px] text-center">
               <button type="button" onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthActionError(''); }} className="text-blue-400 hover:underline uppercase bg-transparent border-0 cursor-pointer font-bold">
                 {isSignUpMode ? '[Returning Handlers Log In]' : 'Create an account to follow the journal\'s travel'}

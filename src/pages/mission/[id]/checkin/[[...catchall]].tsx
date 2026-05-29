@@ -14,19 +14,16 @@ export default function FieldCheckin() {
   const [reportedLocation, setReportedLocation] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   
-  // UPDATED: MULTI-SELECT CHECKBOX STATES (COMPLETED REMOVED)
   const [optReceived, setOptReceived] = useState(false);
   const [optPassedOn, setOptPassedOn] = useState(false);
   const [optRoutine, setOptRoutine] = useState(false);
   
   const [recipientName, setRecipientName] = useState('');
 
-  // USER REGISTRATION STATES
   const [wantsAccount, setWantsAccount] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
 
-  // IN-LINE MODAL SIGN IN STATES
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -242,6 +239,7 @@ export default function FieldCheckin() {
         <header className="flex justify-between items-start border-b border-slate-900/40 pb-4">
           <div className="text-left">
             <h1 className="text-2xl font-black tracking-widest uppercase text-white leading-none">JOURNAL PORTAL</h1>
+            {/* SCRUBBED HARDCODED CAPACITY RATING LABELS HERE */}
             <p className="text-[10px] font-mono text-emerald-400 font-black uppercase tracking-widest mt-1">FIELD CUSTODY TERMINAL // {voyagerId || 'SYNCING...'}</p>
           </div>
           <div className="font-mono text-[10px] uppercase">
@@ -260,7 +258,6 @@ export default function FieldCheckin() {
             <input type="text" required placeholder="E.G., MARK" value={handlerName} onChange={(e) => setHandlerName(e.target.value)} disabled={!!(currentUser && userProfile)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:outline-none focus:border-blue-500 font-black uppercase disabled:opacity-60 disabled:cursor-not-allowed" />
           </div>
 
-          {/* CHECKBOX MATRIX SELECTION BOXES */}
           <div className="space-y-2.5 bg-slate-950/40 border border-slate-900 p-4 rounded-xl">
             <label className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider mb-1">Select Check-in Options (Select all that apply):</label>
             

@@ -43,7 +43,6 @@ export default function MissionControl() {
   const [totalMilesTraveled, setTotalMilesTraveled] = useState(0);
   const [milesFromLaunch, setMilesFromLaunch] = useState(0); 
   const [custodyHandOffCount, setCustodyHandOffCount] = useState(0);
-  const [lifecycleTarget, setLifecycleTarget] = useState(21);
 
   const [timeSinceLaunch, setTimeSinceLaunch] = useState('0s');
   const [timeSinceCheckin, setTimeSinceCheckin] = useState('0s');
@@ -60,31 +59,24 @@ export default function MissionControl() {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  // NEW HUMANIZED TIMER INTERPOLATOR: REMOVES STATIC 000/00 HOOK CODES
   const formatHumanElapsedTime = (msDuration: number, includeYear = false) => {
     if (msDuration <= 0 || isNaN(msDuration)) return '0s';
-    
     const totalSeconds = Math.floor(msDuration / 1000);
     const totalMinutes = Math.floor(totalSeconds / 60);
     const totalHours = Math.floor(totalMinutes / 60);
     const totalDays = Math.floor(totalHours / 24);
-    
     const displaySeconds = String(totalSeconds % 60).padStart(2, '0');
     const displayMinutes = String(totalMinutes % 60).padStart(2, '0');
     const displayHours = String(totalHours % 24).padStart(2, '0');
-
     let pieces: string[] = [];
-
     if (includeYear) {
       const years = Math.floor(totalDays / 365);
       const remainingDays = totalDays % 365;
-      
       if (years > 0) pieces.push(`${years} yr${years > 1 ? 's' : ''}`);
       if (remainingDays > 0 || years > 0) pieces.push(`${remainingDays} day${remainingDays !== 1 ? 's' : ''}`);
     } else {
       if (totalDays > 0) pieces.push(`${totalDays} day${totalDays !== 1 ? 's' : ''}`);
     }
-
     pieces.push(`${displayHours}:${displayMinutes}:${displaySeconds}`);
     return pieces.join(', ');
   };
@@ -106,9 +98,7 @@ export default function MissionControl() {
 
     onSnapshot(doc(db, 'voyagerMissions', uppercaseId), (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data();
-        setVesselData(data);
-        if (data.lifecycleTarget) setLifecycleTarget(parseInt(data.lifecycleTarget) || 21);
+        setVesselData(docSnap.data());
       }
     });
 
@@ -226,8 +216,6 @@ export default function MissionControl() {
   useEffect(() => {
     if (timeline.length > 0) {
       setTotalMilesTraveled(Math.round(mileageCalc));
-
-      // UPDATED: Strictly filter counter scope to entries that checked "tookPossession === true"
       const explicitPossessionCount = logs.filter(log => log.journalOptions?.tookPossession === true).length;
       setCustodyHandOffCount(explicitPossessionCount);
 
@@ -277,14 +265,15 @@ export default function MissionControl() {
           <div className="w-full xl:w-auto">
             <Link href="/" className="text-xs font-mono font-black text-slate-400 hover:text-blue-400 tracking-widest block mb-1">🌍 JOURNAL PORTAL</Link>
             <h1 className="text-3xl font-black text-slate-100 uppercase mt-1">{uppercaseId}</h1>
-            <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">VOLUME LEDGER CHRONICLE: {vesselData?.originCity || 'PARSING...'} → {lifecycleTarget} PAGES</p>
+            {/* SCRUBBED PAGE REQUIREMENT SUFFIX TARGET LABEL */}
+            <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">VOLUME LEDGER CHRONICLE: {vesselData?.originCity || 'PARSING...'}</p>
           </div>
           
-          {/* UPDATED BOX LAYOUT PANEL WITH SCALED-UP TYPOGRAPHY FOR TIMERS */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full xl:w-auto font-mono text-xs text-left">
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">JOURNAL AGE (TOTAL TIME)</span><span className="text-sm font-black text-blue-400 tracking-wide block mt-0.5 whitespace-nowrap">{timeSinceLaunch}</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">TIME SINCE LAST ENTRY</span><span className="text-sm font-black text-emerald-400 tracking-wide block mt-0.5 whitespace-nowrap">{timeSinceCheckin}</span></div>
-            <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">POSSESSION TRANSFERS</span><span className="text-base font-black text-indigo-400 block mt-0.5">{custodyHandOffCount}/{lifecycleTarget}</span></div>
+            {/* CLEANED UP TO REMOVE THE '/21' SPLIT FRACTION FROM DISPLAY */}
+            <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">POSSESSION TRANSFERS</span><span className="text-base font-black text-indigo-400 block mt-0.5">{custodyHandOffCount}</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">DISPLACEMENT</span><span className="text-base font-black text-amber-500 block mt-0.5">{milesFromLaunch.toLocaleString()} MI</span></div>
             <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">TOTAL MILES</span><span className="text-base font-black text-cyan-400 block mt-0.5">{totalMilesTraveled.toLocaleString()} MI</span></div>
             
@@ -295,7 +284,7 @@ export default function MissionControl() {
               {isMapCollapsed ? 'Expand Map' : 'Collapse Map'}
             </button>
 
-            <div className="hidden sm:block bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">STATUS</span><span className="text-xs font-black text-emerald-400 block mt-0.5">{custodyHandOffCount >= lifecycleTarget ? "ACCOMPLISHED" : "IN PROGRESS"}</span></div>
+            <div className="hidden sm:block bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">STATUS</span><span className="text-xs font-black text-emerald-400 block mt-0.5">IN PROGRESS</span></div>
           </div>
         </div>
       </header>
