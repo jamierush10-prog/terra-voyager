@@ -129,12 +129,11 @@ export default function Home() {
       .filter(log => log.voyagerId && log.voyagerId.toUpperCase() === vesselId.toUpperCase())
       .sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
 
-    // FILTER STATE COUNTER TO ONLY MAP EXPLICIT POSSESSION LOG TYPES
     const explicitPossessions = vesselLogs.filter(log => log.journalOptions?.tookPossession === true).length;
     
     let currentLat = parseFloat(baselineData.latitude);
     let currentLng = parseFloat(baselineData.longitude);
-    let label = `PROLOGUE LAYER: ${baselineData.originCity}`;
+    let label = `LAUNCH LOCATION: ${baselineData.originCity}`;
 
     vesselLogs.forEach((log) => {
       const pLat = parseFloat(log.latitude);
@@ -196,7 +195,7 @@ export default function Home() {
       await setDoc(doc(collection(db, 'telemetryLogs')), {
         voyagerId: targetVesselId,
         handlerName: 'ARCHIVE CONSOLE',
-        reportedLocation: `PROLOGUE LAYER: ${finalOriginText}`,
+        reportedLocation: `LAUNCH LOCATION: ${finalOriginText}`,
         latitude: finalLat,
         longitude: finalLng,
         imageUrl: uploadedImageUrl,
@@ -287,7 +286,6 @@ export default function Home() {
                       className="border-2 rounded-xl p-2.5 text-center transition-all flex flex-col items-center justify-center cursor-pointer bg-blue-950/80 border-blue-500 hover:bg-blue-900 shadow-md"
                     >
                       <span className="text-[13px] font-mono font-black text-white tracking-wider">{id}</span>
-                      {/* UPDATED TO OUTPUT ONLY CLEAN PLAIN COUNT INSTEAD OF STRIDED MAXIMUMS */}
                       <span className="text-[10px] font-mono font-bold text-slate-300">{count} transfer{count !== 1 ? 's' : ''}</span>
                     </Link>
                   ) : isAdmin ? (
@@ -310,15 +308,15 @@ export default function Home() {
         </section>
       </main>
 
-      {/* ADMIN BINDING WINDOW MODAL */}
+      {/* ADMIN CREATION SCREEN - UPDATE LABELS TO "LAUNCH LOCATION" */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
             <h3 className="text-sm font-black uppercase text-center text-white tracking-widest">BIND & DEPLOY JOURNAL VOLUME {launchVoyagerId}</h3>
             <form onSubmit={handleLaunchNewVessel} className="space-y-4 text-xs">
               <div>
-                {/* REMOVED TARGET CAPACITY SLIDERS ENTIRELY; LEAVING JUST LAUNCH SEED SPECIFICATION */}
-                <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Initial Prologue Location</label>
+                {/* RE-CONFIGURED FROM INITIAL PROLOGUE TO LAUNCH LOCATION */}
+                <label className="text-[10px] font-black text-slate-300 block mb-1 uppercase tracking-wider">Launch Location</label>
                 <input type="text" required placeholder="e.g. DAPHNE, AL or ZIP Code" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500" />
               </div>
               <div className="grid grid-cols-2 gap-2">

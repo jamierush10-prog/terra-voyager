@@ -239,7 +239,6 @@ export default function FieldCheckin() {
         <header className="flex justify-between items-start border-b border-slate-900/40 pb-4">
           <div className="text-left">
             <h1 className="text-2xl font-black tracking-widest uppercase text-white leading-none">JOURNAL PORTAL</h1>
-            {/* SCRUBBED HARDCODED CAPACITY RATING LABELS HERE */}
             <p className="text-[10px] font-mono text-emerald-400 font-black uppercase tracking-widest mt-1">FIELD CUSTODY TERMINAL // {voyagerId || 'SYNCING...'}</p>
           </div>
           <div className="font-mono text-[10px] uppercase">
