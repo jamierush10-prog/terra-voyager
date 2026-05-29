@@ -36,6 +36,7 @@ export default function Home() {
   const [launchImageFile, setLaunchImageFile] = useState<File | null>(null);
   const [launchingAction, setLaunchingAction] = useState(false);
   const [launchError, setLaunchError] = useState('');
+  const [isLaunchGpsActive, setIsLaunchGpsActive] = useState(false);
 
   useEffect(() => {
     const mCollection = collection(db, 'voyagerMissions');
@@ -86,6 +87,25 @@ export default function Home() {
   const fleetRegistryIds = Array.from({ length: 100 }, (_, i) => {
     return `TV-${String(i + 1).padStart(2, '0')}`;
   });
+
+  const handleRequestLaunchLocation = () => {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
+      setLaunchError('REQUESTING LAUNCH POSITION CODES...');
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLaunchLatitude(position.coords.latitude.toString());
+          setLaunchLongitude(position.coords.longitude.toString());
+          setIsLaunchGpsActive(true);
+          setLaunchError('GPS LAUNCH COORDINATES CAPTURED.');
+        },
+        (error) => {
+          setIsLaunchGpsActive(false);
+          setLaunchError('⚠️ LOCATION DENIED. PLEASE ENTER ZIP OR CITY MANUALLY.');
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+  };
 
   const handleAuthAction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,7 +183,7 @@ export default function Home() {
     let uploadedImageUrl = '';
 
     const isZipCode = /^\d{5}$/.test(launchOriginCity.trim());
-    if (isZipCode) {
+    if (isZipCode && !isLaunchGpsActive) {
       try {
         const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${launchOriginCity.trim()}&country=USA&format=json&addressdetails=1`);
         const geoData = await geoResponse.json();
@@ -208,6 +228,8 @@ export default function Home() {
       setLaunchLatitude('');
       setLaunchLongitude('');
       setLaunchImageFile(null);
+      setIsLaunchGpsActive(false);
+      setLaunchError('');
       setIsLaunchModalOpen(false);
     } catch (err) { console.error(err); }
     setLaunchingAction(false);
@@ -308,16 +330,31 @@ export default function Home() {
         </section>
       </main>
 
-      {/* ADMIN CREATION SCREEN - UPDATE LABELS TO "LAUNCH LOCATION" */}
+      {/* ADMIN LAUNCH MODAL - FIXED AND RENDERED DEVICE LOCATION BUTTON */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
             <h3 className="text-sm font-black uppercase text-center text-white tracking-widest">BIND & DEPLOY JOURNAL VOLUME {launchVoyagerId}</h3>
+            
+            {/* RENDERED: The location request button layout segment above the input parameters */}
+            <div className="bg-slate-950/40 border border-slate-850 p-1 rounded-xl">
+              <button 
+                type="button" 
+                onClick={handleRequestLaunchLocation} 
+                className={`w-full font-bold uppercase py-3 px-4 rounded-xl tracking-wider transition-all text-xs cursor-pointer border ${
+                  isLaunchGpsActive 
+                    ? 'bg-blue-950/40 border-blue-500 text-blue-400' 
+                    : 'bg-slate-950 border-slate-800 text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                {isLaunchGpsActive ? '✓ LAUNCH COORDINATES LOCKED' : '📍 Use Current Device Location'}
+              </button>
+            </div>
+
             <form onSubmit={handleLaunchNewVessel} className="space-y-4 text-xs">
               <div>
-                {/* RE-CONFIGURED FROM INITIAL PROLOGUE TO LAUNCH LOCATION */}
                 <label className="text-[10px] font-black text-slate-300 block mb-1 uppercase tracking-wider">Launch Location</label>
-                <input type="text" required placeholder="e.g. DAPHNE, AL or ZIP Code" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500" />
+                <input type="text" required placeholder="e.g. DAPHNE, AL or ZIP Code" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500 uppercase" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input type="text" placeholder="LATITUDE (OPTIONAL)" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500" />
@@ -327,8 +364,10 @@ export default function Home() {
                 <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Volume Cover Photo</label>
                 <input type="file" accept="image/*" onChange={(e) => setLaunchImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
               </div>
-              {launchError && <p className="text-rose-400 text-[10px] text-center uppercase bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {launchError}</p>}
-              <button type="submit" className="w-full bg-emerald-600 py-3 rounded-xl font-black text-white uppercase tracking-widest">INITIALIZE VOLUME CHRONICLE</button>
+              {launchError && <p className="text-blue-400 text-[10px] text-center uppercase bg-blue-950/20 border border-blue-900/30 p-2.5 rounded-xl">📌 {launchError}</p>}
+              <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest py-3.5 rounded-xl disabled:opacity-50 cursor-pointer">
+                {launchingAction ? 'INITIALIZING CHRONICLE LAYER...' : 'INITIALIZE VOLUME CHRONICLE'}
+              </button>
             </form>
           </div>
         </div>
