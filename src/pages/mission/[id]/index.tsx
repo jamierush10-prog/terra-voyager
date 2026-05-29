@@ -1,397 +1,491 @@
-import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
-import { db } from '../../../firebase/config'; 
-import { doc, collection, query, where, onSnapshot, addDoc, getDocs } from 'firebase/firestore';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { db, storage } from '../firebase/config';
+import { collection, onSnapshot, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
 
 const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
-const Polyline = dynamic(() => import('react-leaflet').then((mod) => mod.Polyline), { ssr: false });
 
-function MapFlyController({ targetFocus }: { targetFocus: [number, number] | null }) {
-  const { useMap } = require('react-leaflet');
-  const map = useMap();
-
-  useEffect(() => {
-    if (map && targetFocus && !isNaN(targetFocus[0]) && !isNaN(targetFocus[1])) {
-      map.flyTo(targetFocus, 8, { animate: true, duration: 1.0 });
-    }
-  }, [targetFocus, map]);
-
-  return null;
-}
-
-export default function MissionControl() {
+export default function Home() {
   const router = useRouter();
-  const { id } = router.query;
-  const uppercaseId = id ? id.toString().toUpperCase() : '';
-
-  const [vesselData, setVesselData] = useState<any>(null);
-  const [logs, setLogs] = useState<any[]>([]);
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [activeVessels, setActiveVessels] = useState<Record<string, any>>({});
+  const [telemetryLogs, setTelemetryLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('ledger');
 
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  const [totalMilesTraveled, setTotalMilesTraveled] = useState(0);
-  const [milesFromLaunch, setMilesFromLaunch] = useState(0); 
-  const [custodyHandOffCount, setCustodyHandOffCount] = useState(0);
+  // ENTRANCE HUB & SUB-ROUTING MODAL STATES
+  const [isEntranceModalOpen, setIsEntranceModalOpen] = useState(true);
+  const [isCheckinLookupOpen, setIsCheckinLookupOpen] = useState(false);
+  const [lookupVoyagerId, setLookupVoyagerId] = useState('');
+  const [lookupError, setLookupError] = useState('');
 
-  const [timeSinceLaunch, setTimeSinceLaunch] = useState('0s');
-  const [timeSinceCheckin, setTimeSinceCheckin] = useState('0s');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authUsername, setAuthUsername] = useState('');
+  const [authActionLoading, setAuthActionLoading] = useState(false);
+  const [authActionError, setAuthActionError] = useState('');
 
-  const [isMapCollapsed, setIsMapCollapsed] = useState(false);
-  const [mapTargetFocus, setMapTargetFocus] = useState<[number, number] | null>(null);
-
-  const calculateHaversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    if (!lat1 || !lon1 || !lat2 || !lon2 || isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
-    const R = 3958.8; 
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
-
-  const formatHumanElapsedTime = (msDuration: number, includeYear = false) => {
-    if (msDuration <= 0 || isNaN(msDuration)) return '0s';
-    const totalSeconds = Math.floor(msDuration / 1000);
-    const totalMinutes = Math.floor(totalSeconds / 60);
-    const totalHours = Math.floor(totalMinutes / 60);
-    const totalDays = Math.floor(totalHours / 24);
-    const displaySeconds = String(totalSeconds % 60).padStart(2, '0');
-    const displayMinutes = String(totalMinutes % 60).padStart(2, '0');
-    const displayHours = String(totalHours % 24).padStart(2, '0');
-    let pieces: string[] = [];
-    if (includeYear) {
-      const years = Math.floor(totalDays / 365);
-      const remainingDays = totalDays % 365;
-      if (years > 0) pieces.push(`${years} yr${years > 1 ? 's' : ''}`);
-      if (remainingDays > 0 || years > 0) pieces.push(`${remainingDays} day${remainingDays !== 1 ? 's' : ''}`);
-    } else {
-      if (totalDays > 0) pieces.push(`${totalDays} day${totalDays !== 1 ? 's' : ''}`);
-    }
-    pieces.push(`${displayHours}:${displayMinutes}:${displaySeconds}`);
-    return pieces.join(', ');
-  };
+  const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false);
+  const [launchVoyagerId, setLaunchVoyagerId] = useState('');
+  const [launchOriginCity, setLaunchOriginCity] = useState('');
+  const [launchLatitude, setLaunchLatitude] = useState('');
+  const [launchLongitude, setLaunchLongitude] = useState('');
+  const [launchImageFile, setLaunchImageFile] = useState<File | null>(null);
+  const [launchingAction, setLaunchingAction] = useState(false);
+  const [launchError, setLaunchError] = useState('');
+  const [isLaunchGpsActive, setIsLaunchGpsActive] = useState(false);
 
   useEffect(() => {
-    if (!uppercaseId) return;
+    const mCollection = collection(db, 'voyagerMissions');
+    const unsubscribeVessels = onSnapshot(mCollection, (snapshot) => {
+      const vesselMap: Record<string, any> = {};
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        vesselMap[doc.id.toUpperCase()] = { id: doc.id, ...data };
+      });
+      setActiveVessels(vesselMap);
+    });
+    return () => unsubscribeVessels();
+  }, []);
 
+  useEffect(() => {
+    const logsCollection = collection(db, 'telemetryLogs');
+    const unsubscribeLogs = onSnapshot(logsCollection, (snapshot) => {
+      const logsList: any[] = [];
+      snapshot.forEach((doc) => {
+        logsList.push({ id: doc.id, ...doc.data() });
+      });
+      setTelemetryLogs(logsList);
+      setLoading(false);
+    });
+    return () => unsubscribeLogs();
+  }, []);
+
+  useEffect(() => {
     const auth = getAuth();
-    onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
         const usersCollection = collection(db, 'users');
         const qProfile = query(usersCollection, where('uid', '==', user.uid));
         getDocs(qProfile).then((snap) => {
           if (!snap.empty) setUserProfile(snap.docs[0].data());
+          setAuthLoading(false);
         });
+      } else {
+        setCurrentUser(null);
+        setUserProfile(null);
+        setAuthLoading(false);
       }
     });
+    return () => unsubscribeAuth();
+  }, []);
 
-    onSnapshot(doc(db, 'voyagerMissions', uppercaseId), (docSnap) => {
-      if (docSnap.exists()) {
-        setVesselData(docSnap.data());
-      }
-    });
+  const fleetRegistryIds = Array.from({ length: 100 }, (_, i) => {
+    return `TV-${String(i + 1).padStart(2, '0')}`;
+  });
 
-    onSnapshot(collection(db, 'telemetryLogs'), (snapshot) => {
-      const fetched: any[] = [];
-      snapshot.forEach((d) => {
-        const data = d.data();
-        if (data.voyagerId && data.voyagerId.toUpperCase() === uppercaseId) fetched.push({ id: d.id, ...data });
-      });
-      fetched.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
-      setLogs(fetched);
-      setLoading(false);
-    });
-
-    onSnapshot(query(collection(db, 'crewComms'), where('voyagerId', '==', uppercaseId)), (snapshot) => {
-      const messages: any[] = [];
-      snapshot.forEach((d) => messages.push({ id: d.id, ...d.data() }));
-      messages.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
-      setChatMessages(messages);
-    });
-  }, [uppercaseId]);
-
-  const timeline: any[] = [];
-  let mileageCalc = 0;
-
-  if (vesselData?.latitude) {
-    let lastLat = parseFloat(vesselData.latitude);
-    let lastLng = parseFloat(vesselData.longitude);
-    let lastTimeMs = new Date(vesselData.launchDate).getTime();
-
-    if (!isNaN(lastLat) && !isNaN(lastLng)) {
-      timeline.push({
-        id: 'LAUNCH',
-        // UPDATED: 'ARCHIVE BASE' -> 'LAUNCH BASE'
-        handlerName: 'LAUNCH BASE',
-        reportedLocation: `LAUNCH LOCATION: ${vesselData.originCity}`,
-        latitude: lastLat,
-        longitude: lastLng,
-        timestamp: lastTimeMs,
-        isLaunchPad: true,
-        // UPDATED: Standardizes display strings for baseline deployment nodes
-        displayActionContext: `${uppercaseId} LAUNCHED`
-      });
+  const handleRequestLaunchLocation = () => {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
+      setLaunchError('REQUESTING LAUNCH POSITION CODES...');
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLaunchLatitude(position.coords.latitude.toString());
+          setLaunchLongitude(position.coords.longitude.toString());
+          setIsLaunchGpsActive(true);
+          setLaunchError('GPS LAUNCH COORDINATES CAPTURED.');
+        },
+        (error) => {
+          setIsLaunchGpsActive(false);
+          setLaunchError('⚠️ LOCATION DENIED. PLEASE ENTER ZIP OR CITY MANUALLY.');
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
     }
-
-    logs.forEach((log) => {
-      const logTimeMs = log.timestamp?.toDate ? log.timestamp.toDate().getTime() : new Date(log.timestamp).getTime();
-
-      while (logTimeMs - lastTimeMs > 30 * 24 * 60 * 60 * 1000) {
-        lastTimeMs += 30 * 24 * 60 * 60 * 1000;
-        if (!isNaN(lastLat) && !isNaN(lastLng)) {
-          timeline.push({
-            id: `MIA_${lastTimeMs}`,
-            handlerName: 'SYSTEM MONITOR',
-            reportedLocation: 'MIA CHECK-IN',
-            latitude: lastLat,
-            longitude: lastLng,
-            timestamp: lastTimeMs,
-            isTimeout: true,
-            displayActionContext: "AUTO INTERVAL OVERRIDE"
-          });
-        }
-      }
-
-      if (!log.isLaunchPad) {
-        const currentLat = parseFloat(log.latitude);
-        const currentLng = parseFloat(log.longitude);
-        
-        if (!isNaN(currentLat) && !isNaN(currentLng) && !isNaN(lastLat) && !isNaN(lastLng)) {
-          mileageCalc += calculateHaversine(lastLat, lastLng, currentLat, currentLng);
-          lastLat = currentLat;
-          lastLng = currentLng;
-        }
-        
-        timeline.push({ 
-          ...log, 
-          timestamp: logTimeMs,
-          latitude: isNaN(currentLat) ? lastLat : currentLat,
-          longitude: isNaN(currentLng) ? lastLng : currentLng
-        });
-      }
-      lastTimeMs = logTimeMs;
-    });
-
-    let nowMs = new Date().getTime();
-    while (nowMs - lastTimeMs > 30 * 24 * 60 * 60 * 1000) {
-      lastTimeMs += 30 * 24 * 60 * 60 * 1000;
-      if (!isNaN(lastLat) && !isNaN(lastLng)) {
-        timeline.push({
-          id: `MIA_${lastTimeMs}`,
-          handlerName: 'SYSTEM MONITOR',
-          reportedLocation: 'MIA CHECK-IN',
-          latitude: lastLat,
-          longitude: lastLng,
-          timestamp: lastTimeMs,
-          isTimeout: true,
-          displayActionContext: "AUTO INTERVAL OVERRIDE"
-        });
-      }
-    }
-  }
-
-  useEffect(() => {
-    const clockTicker = setInterval(() => {
-      const rightNow = new Date().getTime();
-      if (vesselData?.launchDate) {
-        setTimeSinceLaunch(formatHumanElapsedTime(rightNow - new Date(vesselData.launchDate).getTime(), true));
-      }
-      if (timeline.length > 0) {
-        const absoluteLastPoint = timeline[timeline.length - 1];
-        setTimeSinceCheckin(formatHumanElapsedTime(rightNow - absoluteLastPoint.timestamp, false));
-      }
-    }, 1000);
-    return () => clearInterval(clockTicker);
-  }, [vesselData, timeline]);
-
-  useEffect(() => {
-    if (timeline.length > 0) {
-      setTotalMilesTraveled(Math.round(mileageCalc));
-      const explicitPossessionCount = logs.filter(log => log.journalOptions?.tookPossession === true).length;
-      setCustodyHandOffCount(explicitPossessionCount);
-
-      const launchPadNode = timeline[0];
-      const latestActiveNode = timeline[timeline.length - 1];
-      
-      if (launchPadNode && latestActiveNode) {
-        const directDisplacement = calculateHaversine(
-          parseFloat(launchPadNode.latitude),
-          parseFloat(launchPadNode.longitude),
-          parseFloat(latestActiveNode.latitude),
-          parseFloat(latestActiveNode.longitude)
-        );
-        setMilesFromLaunch(Math.round(directDisplacement));
-      }
-    }
-  }, [logs, vesselData, mileageCalc, timeline]);
-
-  const mapPoints: [number, number][] = timeline
-    .map(l => [parseFloat(l.latitude), parseFloat(l.longitude)] as [number, number])
-    .filter(p => p && !isNaN(p[0]) && !isNaN(p[1]));
-
-  const fallbackCenter: [number, number] = [30.6035, -87.9011];
-  const dynamicMapCenter = mapPoints.length > 0 ? mapPoints[mapPoints.length - 1] : fallbackCenter;
-
-  const handleSendCommsMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !userProfile) return;
-    try {
-      await addDoc(collection(db, 'crewComms'), {
-        voyagerId: uppercaseId,
-        senderUid: currentUser.uid,
-        username: userProfile.username || 'Author Member',
-        messageText: newMessage.trim(),
-        timestamp: new Date()
-      });
-      setNewMessage('');
-    } catch (error) { console.error(error); }
   };
 
+  const handleExecuteCheckinRedirect = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetId = lookupVoyagerId.trim().toUpperCase();
+    if (!targetId) return;
+
+    if (activeVessels[targetId]) {
+      setLookupError('');
+      setIsCheckinLookupOpen(false);
+      setIsEntranceModalOpen(false);
+      router.push(`/mission/${targetId.toLowerCase()}/checkin`);
+    } else {
+      setLookupError(`⚠️ VOLUME ${targetId} IS NOT DEPLOYED IN THE EXPEDITION REGISTRY.`);
+    }
+  };
+
+  const handleAuthAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword.trim()) return;
+    if (isSignUpMode && !authUsername.trim()) return;
+
+    setAuthActionLoading(true);
+    setAuthActionError('');
+    const auth = getAuth();
+
+    try {
+      if (isSignUpMode) {
+        const credential = await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+        const user = credential.user;
+        const newProfile = {
+          uid: user.uid,
+          email: user.email,
+          username: authUsername.trim().toUpperCase(),
+          role: 'user'
+        };
+        await setDoc(doc(db, 'users', user.uid), newProfile);
+        setUserProfile(newProfile);
+      } else {
+        await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+      }
+      setIsAuthModalOpen(false);
+      setAuthEmail('');
+      setAuthPassword('');
+      setAuthUsername('');
+    } catch (err: any) {
+      setAuthActionError('Identification parameters rejected or invalid credentials.');
+    } finally {
+      setAuthActionLoading(false);
+    }
+  };
+
+  const processVesselStats = (vesselId: string, baselineData: any) => {
+    if (!baselineData) return { count: 0, lastPin: null };
+
+    const vesselLogs = telemetryLogs
+      .filter(log => log.voyagerId && log.voyagerId.toUpperCase() === vesselId.toUpperCase())
+      .sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+
+    const explicitPossessions = vesselLogs.filter(log => log.journalOptions?.tookPossession === true).length;
+    
+    let currentLat = parseFloat(baselineData.latitude);
+    let currentLng = parseFloat(baselineData.longitude);
+    let label = `LAUNCH LOCATION: ${baselineData.originCity}`;
+
+    vesselLogs.forEach((log) => {
+      const pLat = parseFloat(log.latitude);
+      const pLng = parseFloat(log.longitude);
+      if (!isNaN(pLat) && !isNaN(pLng)) {
+        currentLat = pLat;
+        currentLng = pLng;
+        label = log.reportedLocation || 'JOURNAL ENTRY';
+      }
+    });
+
+    return {
+      count: explicitPossessions,
+      lastPin: { lat: currentLat, lng: currentLng, label }
+    };
+  };
+
+  const handleLaunchNewVessel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetVesselId = launchVoyagerId.trim().toUpperCase();
+    if (!targetVesselId || !launchOriginCity.trim()) return;
+
+    setLaunchingAction(true);
+    let finalOriginText = launchOriginCity.trim().toUpperCase();
+    let finalLat = launchLatitude.trim();
+    let finalLng = launchLongitude.trim();
+    let uploadedImageUrl = '';
+
+    const isZipCode = /^\d{5}$/.test(launchOriginCity.trim());
+    if (isZipCode && !isLaunchGpsActive) {
+      try {
+        const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${launchOriginCity.trim()}&country=USA&format=json&addressdetails=1`);
+        const geoData = await geoResponse.json();
+        if (geoData && geoData.length > 0) {
+          finalLat = geoData[0].lat;
+          finalLng = geoData[0].lon;
+          const addr = geoData[0].address;
+          finalOriginText = `${(addr.city || addr.town || addr.county).toUpperCase()}, ${addr.state ? addr.state.toUpperCase() : 'USA'}`;
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    try {
+      if (launchImageFile) {
+        const storageRef = ref(storage, `launches/${targetVesselId}_${launchImageFile.name}`);
+        const uploadSnapshot = await uploadBytes(storageRef, launchImageFile);
+        uploadedImageUrl = await getDownloadURL(uploadSnapshot.ref);
+      }
+
+      await setDoc(doc(db, 'voyagerMissions', targetVesselId), {
+        missionId: targetVesselId,
+        originCity: finalOriginText,
+        latitude: finalLat,
+        longitude: finalLng,
+        launchImageUrl: uploadedImageUrl,
+        launchDate: new Date().toISOString()
+      });
+
+      await setDoc(doc(collection(db, 'telemetryLogs')), {
+        voyagerId: targetVesselId,
+        handlerName: 'LAUNCH BASE',
+        reportedLocation: `LAUNCH LOCATION: ${finalOriginText}`,
+        latitude: finalLat,
+        longitude: finalLng,
+        imageUrl: uploadedImageUrl,
+        timestamp: new Date(),
+        verified: true,
+        isLaunchPad: true,
+        displayActionContext: `${targetVesselId} LAUNCHED`
+      });
+
+      setLaunchOriginCity('');
+      setLaunchLatitude('');
+      setLaunchLongitude('');
+      setLaunchImageFile(null);
+      setIsLaunchGpsActive(false);
+      setLaunchError('');
+      setIsLaunchModalOpen(false);
+    } catch (err) { console.error(err); }
+    setLaunchingAction(false);
+  };
+
+  const activeMapMarkers = Object.keys(activeVessels).map((id) => {
+    const stats = processVesselStats(id, activeVessels[id]);
+    return stats.lastPin ? { vesselId: id, ...stats.lastPin } : null;
+  }).filter(Boolean);
+
+  const isAdmin = userProfile?.role === 'admin';
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col h-screen overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:h-screen overflow-x-hidden relative">
       <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-      <header className="p-4 border-b border-slate-900 bg-slate-900/60 backdrop-blur shrink-0 z-50">
-        <div className="max-w-7xl mx-auto flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-          <div className="w-full xl:w-auto">
-            <Link href="/" className="text-xs font-mono font-black text-slate-400 hover:text-blue-400 tracking-widest block mb-1">🌍 JOURNAL PORTAL</Link>
-            <h1 className="text-3xl font-black text-slate-100 uppercase mt-1">{uppercaseId}</h1>
-            <p className="text-xs font-mono text-slate-300 uppercase tracking-wide mt-1">VOLUME LEDGER CHRONICLE: {vesselData?.originCity || 'PARSING...'}</p>
-          </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full xl:w-auto font-mono text-xs text-left">
-            <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">JOURNAL AGE (TOTAL TIME)</span><span className="text-sm font-black text-blue-400 tracking-wide block mt-0.5 whitespace-nowrap">{timeSinceLaunch}</span></div>
-            <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">TIME SINCE LAST ENTRY</span><span className="text-sm font-black text-emerald-400 tracking-wide block mt-0.5 whitespace-nowrap">{timeSinceCheckin}</span></div>
-            <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">POSSESSION TRANSFERS</span><span className="text-base font-black text-indigo-400 block mt-0.5">{custodyHandOffCount}</span></div>
-            <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">DISPLACEMENT</span><span className="text-base font-black text-amber-500 block mt-0.5">{milesFromLaunch.toLocaleString()} MI</span></div>
-            <div className="bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">TOTAL MILES</span><span className="text-base font-black text-cyan-400 block mt-0.5">{totalMilesTraveled.toLocaleString()} MI</span></div>
-            
-            <button 
-              onClick={() => setIsMapCollapsed(!isMapCollapsed)}
-              className="md:hidden bg-slate-900/60 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl p-2 flex flex-col items-center justify-center font-mono font-black tracking-widest text-[10px] uppercase shadow transition-all cursor-pointer min-h-[46px]"
-            >
-              {isMapCollapsed ? 'Expand Map' : 'Collapse Map'}
-            </button>
-
-            <div className="hidden sm:block bg-slate-950/80 p-2.5 border border-slate-900 rounded-xl"><span className="text-[9px] text-slate-400 block font-bold">STATUS</span><span className="text-xs font-black text-emerald-400 block mt-0.5">IN PROGRESS</span></div>
-          </div>
+      <header className="p-4 border-b border-slate-900 bg-slate-900/40 backdrop-blur shrink-0 z-40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-xl font-black tracking-widest text-slate-100 uppercase">THE TRAVELING JOURNAL PROJECT</h1>
+          <p className="text-[10px] font-mono text-slate-300 uppercase tracking-widest font-bold mt-0.5">A Collective Chronicle of Shared Travels & Handwritten Stories</p>
+        </div>
+        <div className="font-mono text-xs uppercase tracking-wider">
+          {authLoading ? (
+            <span className="text-slate-400 animate-pulse">CONNECTING ARCHIVES...</span>
+          ) : currentUser && userProfile ? (
+            <div className="flex items-center space-x-4">
+              <span className="text-white font-black">{userProfile.username}</span>
+              {isAdmin && <Link href="/admin" className="text-emerald-400 font-black hover:underline">[EDIT CONTROL]</Link>}
+              <button onClick={() => getAuth().signOut()} className="text-slate-300 font-bold hover:underline bg-transparent border-0 cursor-pointer p-0">[SIGN OUT]</button>
+            </div>
+          ) : (
+            <button onClick={() => { setIsSignUpMode(false); setAuthActionError(''); setIsAuthModalOpen(true); }} className="text-blue-400 hover:text-blue-300 font-black tracking-widest uppercase transition-all bg-transparent border-0 cursor-pointer p-0">Sign In</button>
+          )}
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden max-w-7xl w-full mx-auto relative z-10">
-        <section className={`w-full md:w-1/2 border-slate-900 relative shrink-0 transition-all duration-300 ease-in-out ${isMapCollapsed ? 'h-0 border-b-0 hidden md:block md:h-full' : 'h-[40vh] md:h-full border-b md:border-b-0 md:border-r'}`}>
-          {mapPoints.length > 0 ? (
-            <MapContainer center={dynamicMapCenter} zoom={5} style={{ height: '100%', width: '100%', background: '#020617' }}>
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-              <MapFlyController targetFocus={mapTargetFocus} />
-              {mapPoints.length > 1 && <Polyline positions={mapPoints} color="#2563eb" weight={3} dashArray="5, 8" />}
-              {timeline.map((point) => {
-                const pLat = parseFloat(point.latitude);
-                const pLng = parseFloat(point.longitude);
-                if (isNaN(pLat) || isNaN(pLng)) return null;
-                return (
-                  <Marker key={point.id} position={[pLat, pLng]}>
-                    <Popup>
-                      <div className="font-mono text-xs p-1 text-slate-900 space-y-1">
-                        <div className="font-black text-blue-600 block uppercase">✍️ {point.handlerName}</div>
-                        {point.displayActionContext && <div className="text-[10px] font-bold text-slate-500 uppercase">Action: {point.displayActionContext}</div>}
-                        <div className="text-[10px] font-black text-slate-700 uppercase">📍 {point.reportedLocation}</div>
-                        <div className="text-[9px] border-t border-slate-200 pt-1 text-slate-400 font-bold mt-1">
-                          {new Date(point.timestamp).toLocaleString()}
-                        </div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
-            </MapContainer>
-          ) : (
-            <div className="h-full w-full flex items-center justify-center font-mono text-slate-500 text-xs uppercase bg-slate-950">
-              No geographical coordinate vectors recorded for this volume layout.
-            </div>
-          )}
+      <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative z-10">
+        <section className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-full border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950 relative shrink-0">
+          <MapContainer center={[37.0902, -95.7129]} zoom={4} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
+            <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+            {activeMapMarkers.map((pin: any) => (
+              <Marker key={pin.vesselId} position={[pin.lat, pin.lng]}>
+                <Popup>
+                  <div className="text-slate-900 font-mono text-xs font-bold p-1">
+                    <span className="text-blue-600 font-black block text-sm">{pin.vesselId}</span>
+                    <span className="block mt-0.5 text-slate-700">Last entry: {pin.label}</span>
+                    <Link href={`/mission/${pin.vesselId.toLowerCase()}`} className="text-blue-500 underline block mt-2 text-[11px] uppercase font-black">Open Volume Ledger →</Link>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
         </section>
 
-        <section className="flex-1 flex flex-col h-auto md:h-full overflow-hidden bg-slate-950/20">
-          <div className="flex border-b border-slate-900 p-4 bg-slate-950 shrink-0">
-            <button onClick={() => setActiveTab('ledger')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase ${activeTab === 'ledger' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Custody Log</button>
-            <button onClick={() => setActiveTab('chat')} className={`flex-1 pb-2 text-sm font-bold tracking-wider uppercase ${activeTab === 'chat' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Marginalia // Notes</button>
+        <section className="w-full md:w-1/2 flex flex-col h-auto md:h-full overflow-hidden bg-slate-900/10">
+          <div className="p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur shrink-0 flex justify-between items-center">
+            <h2 className="text-xs font-mono font-black text-slate-100 uppercase tracking-widest">VOLUME LIFE EXPEDITION REGISTRY</h2>
+            <div className="flex items-center space-x-3 font-mono text-[9px] font-bold uppercase text-slate-300">
+              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 block"></span><span>Active Logs</span></div>
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {activeTab === 'ledger' ? (
-              [...timeline].reverse().map((point) => (
-                <div 
-                  key={point.id} 
-                  onClick={() => {
-                    const lat = parseFloat(point.latitude);
-                    const lng = parseFloat(point.longitude);
-                    if (!isNaN(lat) && !isNaN(lng)) {
-                      setMapTargetFocus([lat, lng]);
-                    }
-                  }}
-                  className="p-4 rounded-xl border bg-slate-900/50 border-slate-900 hover:border-blue-500/50 hover:bg-slate-900 cursor-pointer transition-all group"
-                >
-                  <div className="flex justify-between items-center font-mono text-xs gap-3">
-                    {/* DISPLAY CHANGES WILL REFLECT LIVE IN HANDLER CODES */}
-                    <span className="text-slate-200 font-bold group-hover:text-blue-400 transition-colors">Journal in possession of: <span className={`${point.isTimeout ? 'text-amber-400 font-black' : 'text-white font-black'}`}>{point.handlerName}</span></span>
-                    <span className={`px-2.5 py-1 rounded text-white font-bold uppercase border text-[11px] truncate ${point.isTimeout ? 'bg-amber-950/60 border-amber-800/40 text-amber-400' : 'bg-slate-950 border-slate-800'}`}>{point.reportedLocation}</span>
-                  </div>
-                  
-                  {point.displayActionContext && (
-                    <div className="mt-2 text-[10px] font-mono font-black text-blue-400 uppercase bg-blue-950/20 border border-blue-900/30 px-2 py-1 rounded w-fit">
-                      📌 Actions: {point.displayActionContext}
-                    </div>
-                  )}
-
-                  {point.imageUrl && <img src={point.imageUrl} alt="Log Attachment" className="w-full max-h-64 object-cover rounded-xl mt-3 mx-auto border border-slate-950" />}
-                  <div className="text-[10px] font-mono text-slate-400 mt-2 text-right">{new Date(point.timestamp).toLocaleString()}</div>
-                </div>
-              ))
+          <div className="flex-1 overflow-y-auto p-4 bg-slate-950/40">
+            {loading ? (
+              <div className="text-center py-12 font-mono text-xs text-slate-400 animate-pulse">READING VOLUME ARCHIVES...</div>
             ) : (
-              <div className="flex-1 flex flex-col overflow-hidden space-y-4">
-                <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 font-mono text-xs">
-                  {chatMessages.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 uppercase text-[11px] font-bold">Secure Channel Established. Begin Margin Notes...</div>
-                  ) : (
-                    chatMessages.map((msg) => (
-                      <div key={msg.id} className="p-2.5 bg-slate-900/40 border border-slate-900/60 rounded-xl space-y-1">
-                        <div className="flex justify-between items-center border-b border-slate-950/40 pb-1 text-[11px]">
-                          <span className="text-blue-400 font-black flex items-center">{msg.username}</span>
-                          <span className="text-slate-400 font-bold">{msg.timestamp?.toDate ? msg.timestamp.toDate().toLocaleString() : new Date(msg.timestamp).toLocaleString()}</span>
-                        </div>
-                        <p className="text-slate-100 break-words pt-0.5 text-[13px] font-bold">{msg.messageText}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2.5">
+                {fleetRegistryIds.map((id) => {
+                  const baseline = activeVessels[id];
+                  const isDeployed = !!baseline;
+                  const { count } = processVesselStats(id, baseline);
 
-                {currentUser && userProfile ? (
-                  <form onSubmit={handleSendCommsMessage} className="pt-2 flex items-center space-x-2 shrink-0 bg-transparent">
-                    <input type="text" placeholder={`Add a margin note as ${userProfile.username}...`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-100 focus:outline-none focus:border-blue-500 font-bold" />
-                    <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-xs font-bold uppercase py-3 px-5 rounded-xl transition-all shadow cursor-pointer">Send</button>
-                  </form>
-                ) : (
-                  <div className="text-center py-4 font-mono text-[11px] text-slate-500">
-                    [LOG IN AT MAIN PORTAL ROW FRAME TO ENABLE MARGINALIA BROADCASTS]
-                  </div>
-                )}
+                  return isDeployed ? (
+                    <Link 
+                      key={id} href={`/mission/${id.toLowerCase()}`}
+                      className="border-2 rounded-xl p-2.5 text-center transition-all flex flex-col items-center justify-center cursor-pointer bg-blue-950/80 border-blue-500 hover:bg-blue-900 shadow-md"
+                    >
+                      <span className="text-[13px] font-mono font-black text-white tracking-wider">{id}</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-300">{count} transfer{count !== 1 ? 's' : ''}</span>
+                    </Link>
+                  ) : isAdmin ? (
+                    <button 
+                      key={id} onClick={() => { setLaunchVoyagerId(id); setIsLaunchModalOpen(true); }}
+                      className="bg-slate-900/40 border border-slate-800 border-dashed hover:border-emerald-500 hover:bg-emerald-950/20 rounded-xl p-3 text-center flex flex-col items-center justify-center transition-all cursor-pointer group"
+                    >
+                      <span className="text-[12px] font-mono font-bold text-slate-500 group-hover:text-emerald-400">{id}</span>
+                      <span className="text-[8px] font-mono font-black text-emerald-500 tracking-wider">[BIND]</span>
+                    </button>
+                  ) : (
+                    <div key={id} className="bg-slate-900/10 border border-slate-900 rounded-xl p-3 text-center opacity-[0.15] select-none">
+                      <span className="text-[12px] font-mono font-bold text-slate-500">{id}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         </section>
       </main>
+
+      {/* NEW CORE ROUTING HUB INTERACTION ENTRANCE MODAL */}
+      {isEntranceModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-50 flex items-center justify-center p-4 font-mono select-none">
+          <div className="w-full max-w-sm bg-slate-900 border border-slate-800/80 rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl text-center">
+            <header className="space-y-2">
+              <span className="text-3xl block">🌍</span>
+              <h2 className="text-sm font-black uppercase text-white tracking-widest">THE TRAVELING JOURNAL</h2>
+              <p className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Expedition Entry Matrix Terminal</p>
+            </header>
+
+            {!isCheckinLookupOpen ? (
+              <div className="flex flex-col space-y-3">
+                {/* LANE 1: OVERVIEW DIRECTORY CLOSURE */}
+                <button 
+                  type="button" 
+                  onClick={() => setIsEntranceModalOpen(false)}
+                  className="w-full bg-slate-950 border border-slate-800 hover:bg-slate-900 text-slate-100 font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center"
+                >
+                  Explore Project Overview
+                </button>
+
+                {/* LANE 2: SUB-MODAL ACTION OVERLAY FOR LOGGING POSSESSION */}
+                <button 
+                  type="button" 
+                  onClick={() => { setLookupError(''); setIsCheckinLookupOpen(true); }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md"
+                >
+                  Log Active Volume Check-In
+                </button>
+
+                {/* LANE 3: Fresh account enlistments */}
+                <button 
+                  type="button" 
+                  onClick={() => { setIsEntranceModalOpen(false); setIsSignUpMode(true); setAuthActionError(''); setIsAuthModalOpen(true); }}
+                  className="w-full bg-transparent text-blue-400 hover:underline font-bold text-[10px] uppercase tracking-wider pt-2 cursor-pointer border-0"
+                >
+                  [Enlist New Custodian Profile]
+                </button>
+              </div>
+            ) : (
+              /* ACTIVE ENTRY SCAN/ROUTING HOOK INTERACTION SCREEN */
+              <form onSubmit={handleExecuteCheckinRedirect} className="space-y-4 text-left animate-fadeIn">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-slate-400 block uppercase tracking-widest">Input Active Volume Identification Code:</label>
+                  <input 
+                    type="text" 
+                    required 
+                    autoFocus 
+                    placeholder="E.G. TV-01" 
+                    value={lookupVoyagerId} 
+                    onChange={(e) => setLookupVoyagerId(e.target.value)} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white uppercase text-center font-black text-sm tracking-widest focus:outline-none focus:border-blue-500" 
+                  />
+                </div>
+                {lookupError && <p className="text-rose-400 text-[9px] text-center uppercase font-bold leading-normal">{lookupError}</p>}
+                <div className="grid grid-cols-2 gap-2 pt-1 font-bold text-[10px]">
+                  <button type="button" onClick={() => { setIsCheckinLookupOpen(false); setLookupVoyagerId(''); setLookupError(''); }} className="w-full bg-slate-950 border border-slate-850 hover:bg-slate-900 text-slate-400 uppercase p-3 rounded-lg cursor-pointer text-center">[Back]</button>
+                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white uppercase p-3 rounded-lg cursor-pointer text-center">Open Portal →</button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ADMIN LAUNCH ENTRY MODAL */}
+      {isLaunchModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
+            <h3 className="text-sm font-black uppercase text-center text-white tracking-widest">BIND & DEPLOY JOURNAL VOLUME {launchVoyagerId}</h3>
+            
+            <div className="bg-slate-950/40 border border-slate-850 p-1 rounded-xl">
+              <button 
+                type="button" 
+                onClick={handleRequestLaunchLocation} 
+                className={`w-full font-bold uppercase py-3 px-4 rounded-xl tracking-wider transition-all text-xs cursor-pointer border ${
+                  isLaunchGpsActive 
+                    ? 'bg-blue-950/40 border-blue-500 text-blue-400' 
+                    : 'bg-slate-950 border-slate-800 text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                {isLaunchGpsActive ? '✓ LAUNCH COORDINATES LOCKED' : '📍 Use Current Device Location'}
+              </button>
+            </div>
+
+            <form onSubmit={handleLaunchNewVessel} className="space-y-4 text-xs">
+              <div>
+                <label className="text-[10px] font-black text-slate-300 block mb-1 uppercase tracking-wider">Launch Location</label>
+                <input type="text" required placeholder="e.g. DAPHNE, AL or ZIP Code" value={launchOriginCity} onChange={(e) => setLaunchOriginCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-bold focus:outline-none focus:border-blue-500 uppercase" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="text" placeholder="LATITUDE (OPTIONAL)" value={launchLatitude} onChange={(e) => setLaunchLatitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500" />
+                <input type="text" placeholder="LONGITUDE (OPTIONAL)" value={launchLongitude} onChange={(e) => setLaunchLongitude(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-slate-300 block mb-1 uppercase tracking-wider">Volume Cover Photo</label>
+                <input type="file" accept="image/*" onChange={(e) => setLaunchImageFile(e.target.files?.[0] || null)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-slate-300 text-[11px] file:mr-3 file:py-1 file:px-2 file:rounded file:bg-slate-900 file:text-white file:border-0 file:text-[10px] file:uppercase file:font-bold hover:file:bg-slate-800 file:cursor-pointer" />
+              </div>
+              {launchError && <p className="text-blue-400 text-[10px] text-center uppercase bg-blue-950/20 border border-blue-900/30 p-2.5 rounded-xl">📌 {launchError}</p>}
+              <button type="submit" disabled={launchingAction} className="w-full bg-emerald-600 py-3 rounded-xl font-black text-white uppercase tracking-widest disabled:opacity-50 cursor-pointer">
+                {launchingAction ? 'INITIALIZING CHRONICLE LAYER...' : 'INITIALIZE VOLUME CHRONICLE'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
+          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-2xl relative">
+            <header className="text-center space-y-1.5">
+              <h2 className="text-sm font-black uppercase text-white tracking-wider">{isSignUpMode ? 'Create Account' : 'Identity Verification'}</h2>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider">{isSignUpMode ? 'Register profile codes' : 'Input verification passkey'}</p>
+            </header>
+            <form onSubmit={handleAuthAction} className="space-y-4">
+              {isSignUpMode && (
+                <input type="text" required placeholder="CHOOSE USERNAME" value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white uppercase font-bold text-center focus:outline-none focus:border-blue-500" />
+              )}
+              <input type="email" required placeholder="EMAIL ADDR" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500" />
+              <input type="password" required placeholder="PASSWORD KEY" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-blue-500" />
+              {authActionError && <p className="text-rose-400 text-[10px] text-center uppercase tracking-wide bg-rose-950/20 border border-rose-900/40 p-2 rounded-lg">⚠️ {authActionError}</p>}
+              <button type="submit" disabled={authActionLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-widest py-3.5 px-4 rounded-xl transition-all disabled:opacity-50 cursor-pointer">{authActionLoading ? 'PROCESSING...' : isSignUpMode ? 'CREATE PROFILE' : 'VERIFY KEY'}</button>
+            </form>
+            <div className="border-t border-slate-800 pt-4 flex flex-col space-y-2 text-[10px] text-center">
+              <button type="button" onClick={() => { setIsSignUpMode(!isSignUpMode); setAuthActionError(''); }} className="text-blue-400 hover:underline uppercase bg-transparent border-0 cursor-pointer font-bold">
+                {isSignUpMode ? '[Returning Handlers Log In]' : 'Create an account to follow the journal\'s travel'}
+              </button>
+              <button type="button" onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-200 uppercase bg-transparent border-0 cursor-pointer tracking-wider text-[9px]">[Cancel]</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
