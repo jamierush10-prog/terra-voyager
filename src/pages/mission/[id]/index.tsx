@@ -1,6 +1,5 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
-// FIXED: Calibrated the exact directory depth step back to the Firebase configuration path
 import { db } from '../../../firebase/config'; 
 import { doc, collection, query, where, onSnapshot, addDoc, getDocs } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -125,22 +124,21 @@ export default function MissionControl() {
   const timeline: any[] = [];
   let mileageCalc = 0;
 
-  if (vesselData?.latitude) {
-    let lastLat = parseFloat(vesselData.latitude);
-    let lastLng = parseFloat(vesselData.longitude);
+  if (vesselData) {
+    // ENHANCED STRING-SAFE COERCION TO BYPASS FIRESTORE TYPE LOCKS
+    let lastLat = parseFloat(String(vesselData.latitude));
+    let lastLng = parseFloat(String(vesselData.longitude));
     let lastTimeMs = new Date(vesselData.launchDate).getTime();
 
     if (!isNaN(lastLat) && !isNaN(lastLng)) {
       timeline.push({
         id: 'LAUNCH',
-        // VERIFIED: 'LAUNCH BASE'
         handlerName: 'LAUNCH BASE',
         reportedLocation: `LAUNCH LOCATION: ${vesselData.originCity}`,
         latitude: lastLat,
         longitude: lastLng,
         timestamp: lastTimeMs,
         isLaunchPad: true,
-        // VERIFIED: Custom dynamic launched status strings
         displayActionContext: `${uppercaseId} LAUNCHED`
       });
     }
@@ -165,8 +163,8 @@ export default function MissionControl() {
       }
 
       if (!log.isLaunchPad) {
-        const currentLat = parseFloat(log.latitude);
-        const currentLng = parseFloat(log.longitude);
+        const currentLat = parseFloat(String(log.latitude));
+        const currentLng = parseFloat(String(log.longitude));
         
         if (!isNaN(currentLat) && !isNaN(currentLng) && !isNaN(lastLat) && !isNaN(lastLng)) {
           mileageCalc += calculateHaversine(lastLat, lastLng, currentLat, currentLng);
@@ -183,23 +181,6 @@ export default function MissionControl() {
       }
       lastTimeMs = logTimeMs;
     });
-
-    let nowMs = new Date().getTime();
-    while (nowMs - lastTimeMs > 30 * 24 * 60 * 60 * 1000) {
-      lastTimeMs += 30 * 24 * 60 * 60 * 1000;
-      if (!isNaN(lastLat) && !isNaN(lastLng)) {
-        timeline.push({
-          id: `MIA_${lastTimeMs}`,
-          handlerName: 'SYSTEM MONITOR',
-          reportedLocation: 'MIA CHECK-IN',
-          latitude: lastLat,
-          longitude: lastLng,
-          timestamp: lastTimeMs,
-          isTimeout: true,
-          displayActionContext: "AUTO INTERVAL OVERRIDE"
-        });
-      }
-    }
   }
 
   useEffect(() => {
@@ -227,10 +208,10 @@ export default function MissionControl() {
       
       if (launchPadNode && latestActiveNode) {
         const directDisplacement = calculateHaversine(
-          parseFloat(launchPadNode.latitude),
-          parseFloat(launchPadNode.longitude),
-          parseFloat(latestActiveNode.latitude),
-          parseFloat(latestActiveNode.longitude)
+          parseFloat(String(launchPadNode.latitude)),
+          parseFloat(String(launchPadNode.longitude)),
+          parseFloat(String(latestActiveNode.latitude)),
+          parseFloat(String(latestActiveNode.longitude))
         );
         setMilesFromLaunch(Math.round(directDisplacement));
       }
@@ -238,7 +219,7 @@ export default function MissionControl() {
   }, [logs, vesselData, mileageCalc, timeline]);
 
   const mapPoints: [number, number][] = timeline
-    .map(l => [parseFloat(l.latitude), parseFloat(l.longitude)] as [number, number])
+    .map(l => [parseFloat(String(l.latitude)), parseFloat(String(l.longitude))] as [number, number])
     .filter(p => p && !isNaN(p[0]) && !isNaN(p[1]));
 
   const fallbackCenter: [number, number] = [30.6035, -87.9011];
@@ -298,8 +279,8 @@ export default function MissionControl() {
               <MapFlyController targetFocus={mapTargetFocus} />
               {mapPoints.length > 1 && <Polyline positions={mapPoints} color="#2563eb" weight={3} dashArray="5, 8" />}
               {timeline.map((point) => {
-                const pLat = parseFloat(point.latitude);
-                const pLng = parseFloat(point.longitude);
+                const pLat = parseFloat(String(point.latitude));
+                const pLng = parseFloat(String(point.longitude));
                 if (isNaN(pLat) || isNaN(pLng)) return null;
                 return (
                   <Marker key={point.id} position={[pLat, pLng]}>
@@ -336,8 +317,8 @@ export default function MissionControl() {
                 <div 
                   key={point.id} 
                   onClick={() => {
-                    const lat = parseFloat(point.latitude);
-                    const lng = parseFloat(point.longitude);
+                    const lat = parseFloat(String(point.latitude));
+                    const lng = parseFloat(String(point.longitude));
                     if (!isNaN(lat) && !isNaN(lng)) {
                       setMapTargetFocus([lat, lng]);
                     }
