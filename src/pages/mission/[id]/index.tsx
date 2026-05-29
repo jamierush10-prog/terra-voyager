@@ -50,6 +50,20 @@ export default function MissionControl() {
   const [isMapCollapsed, setIsMapCollapsed] = useState(false);
   const [mapTargetFocus, setMapTargetFocus] = useState<[number, number] | null>(null);
 
+  // CONFIGURE THIN RED BALL MARKER VECTOR FOR LEDGER VIEWS
+  const [customRedIcon, setCustomRedIcon] = useState<any>(null);
+
+  useEffect(() => {
+    const L = require('leaflet');
+    const redPinInstance = new L.Icon({
+      iconUrl: 'https://cdn-icons-png.flaticon.com/512/9131/9131546.png', 
+      iconSize: [36, 36],
+      iconAnchor: [18, 36],
+      popupAnchor: [0, -32],
+    });
+    setCustomRedIcon(redPinInstance);
+  }, []);
+
   const calculateHaversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     if (!lat1 || !lon1 || !lat2 || !lon2 || isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return 0;
     const R = 3958.8; 
@@ -125,7 +139,6 @@ export default function MissionControl() {
   let mileageCalc = 0;
 
   if (vesselData) {
-    // ENHANCED STRING-SAFE COERCION TO BYPASS FIRESTORE TYPE LOCKS
     let lastLat = parseFloat(String(vesselData.latitude));
     let lastLng = parseFloat(String(vesselData.longitude));
     let lastTimeMs = new Date(vesselData.launchDate).getTime();
@@ -283,7 +296,8 @@ export default function MissionControl() {
                 const pLng = parseFloat(String(point.longitude));
                 if (isNaN(pLat) || isNaN(pLng)) return null;
                 return (
-                  <Marker key={point.id} position={[pLat, pLng]}>
+                  /* APPLIED CUSTOM THIN RED PIN DESIGN FOR PATH LOG NODES */
+                  <Marker key={point.id} position={[pLat, pLng]} icon={customRedIcon || undefined}>
                     <Popup>
                       <div className="font-mono text-xs p-1 text-slate-900 space-y-1">
                         <div className="font-black text-blue-600 block uppercase">✍️ {point.handlerName}</div>

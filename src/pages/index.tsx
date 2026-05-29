@@ -22,7 +22,6 @@ export default function Home() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // ENTRANCE HUB & HYDRATION STATES
   const [isEntranceModalOpen, setIsEntranceModalOpen] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   
@@ -50,9 +49,22 @@ export default function Home() {
   const [launchError, setLaunchError] = useState('');
   const [isLaunchGpsActive, setIsLaunchGpsActive] = useState(false);
 
+  // CONFIGURE THIN RED BALL MARKER VECTOR
+  const [customRedIcon, setCustomRedIcon] = useState<any>(null);
+
   useEffect(() => {
     setHasHydrated(true);
     setIsEntranceModalOpen(true);
+
+    // Initialize custom icon inside browser runtime scope
+    const L = require('leaflet');
+    const redPinInstance = new L.Icon({
+      iconUrl: 'https://cdn-icons-png.flaticon.com/512/9131/9131546.png', // Crisp, thin red mapping pin with red round ball
+      iconSize: [36, 36],
+      iconAnchor: [18, 36], // Center bottom point anchors perfectly to coordinate vector
+      popupAnchor: [0, -32],
+    });
+    setCustomRedIcon(redPinInstance);
   }, []);
 
   useEffect(() => {
@@ -199,13 +211,13 @@ export default function Home() {
 
     const explicitPossessions = vesselLogs.filter(log => log.journalOptions?.tookPossession === true).length;
     
-    let currentLat = parseFloat(baselineData.latitude);
-    let currentLng = parseFloat(baselineData.longitude);
+    let currentLat = parseFloat(String(baselineData.latitude));
+    let currentLng = parseFloat(String(baselineData.longitude));
     let label = `LAUNCH LOCATION: ${baselineData.originCity}`;
 
     vesselLogs.forEach((log) => {
-      const pLat = parseFloat(log.latitude);
-      const pLng = parseFloat(log.longitude);
+      const pLat = parseFloat(String(log.latitude));
+      const pLng = parseFloat(String(log.longitude));
       if (!isNaN(pLat) && !isNaN(pLng)) {
         currentLat = pLat;
         currentLng = pLng;
@@ -294,7 +306,6 @@ export default function Home() {
     setLaunchingAction(false);
   };
 
-  // FIXED: Rewrote the object map parsing chain to clean up the broken trailing ternary syntax error
   const activeMapMarkers = Object.keys(activeVessels)
     .map((id) => {
       const stats = processVesselStats(id, activeVessels[id]);
@@ -336,7 +347,8 @@ export default function Home() {
           <MapContainer center={[37.0902, -95.7129]} zoom={4} style={{ height: '100%', width: '100%', background: '#020617' }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
             {activeMapMarkers.map((pin: any) => (
-              <Marker key={pin.vesselId} position={[pin.lat, pin.lng]}>
+              /* APPLIED CUSTOM THIN RED PIN DESIGN */
+              <Marker key={pin.vesselId} position={[pin.lat, pin.lng]} icon={customRedIcon || undefined}>
                 <Popup>
                   <div className="text-slate-900 font-mono text-xs font-bold p-1">
                     <span className="text-blue-600 font-black block text-sm">{pin.vesselId}</span>
@@ -353,7 +365,7 @@ export default function Home() {
           <div className="p-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur shrink-0 flex justify-between items-center">
             <h2 className="text-xs font-mono font-black text-slate-100 uppercase tracking-widest">VOLUME LIFE EXPEDITION REGISTRY</h2>
             <div className="flex items-center space-x-3 font-mono text-[9px] font-bold uppercase text-slate-300">
-              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 block"></span><span>Active Logs</span></div>
+              <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 block"></span><span>Active Logs</span></div>
             </div>
           </div>
 
@@ -433,6 +445,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* ADMIN LAUNCH ENTRY MODAL */}
       {isLaunchModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-2xl">
