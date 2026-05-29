@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, storage } from '../firebase/config';
-import { collection, onSnapshot, addDoc, doc, updateDoc, arrayUnion, arrayRemove, query, orderBy } from 'firebase/firestore';
+// FIXED: Appended the explicit 'where' constraint directly into the library import array
+import { collection, onSnapshot, addDoc, doc, updateDoc, arrayUnion, arrayRemove, query, orderBy, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import Link from 'next/link';
@@ -28,7 +29,6 @@ export default function GlobalChatRoom() {
   const [newMessage, setNewMessage] = useState('');
   const [parentImage, setParentImage] = useState<File | null>(null);
   
-  // REPLY MATRIX TRACKING MECHANISMS
   const [activeReplyBoxId, setActiveReplyBoxId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [replyImage, setReplyImage] = useState<File | null>(null);
@@ -43,7 +43,6 @@ export default function GlobalChatRoom() {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
-        // Fetch valid signature credentials
         onSnapshot(query(collection(db, 'users'), where('uid', '==', user.uid)), (snap) => {
           if (!snap.empty) setUserProfile(snap.docs[0].data());
         });
@@ -53,7 +52,6 @@ export default function GlobalChatRoom() {
       }
     });
 
-    // Pipeline message collection array listening parameters
     const qChat = query(collection(db, 'globalChatMessages'), orderBy('timestamp', 'asc'));
     const unsubscribeChat = onSnapshot(qChat, (snapshot) => {
       const msgList: ChatMessage[] = [];
@@ -129,7 +127,7 @@ export default function GlobalChatRoom() {
         id: `REP_${Date.now()}`,
         username: userProfile.username.toUpperCase(),
         messageText: replyText.trim(),
-        timestamp: new Date().toISOString(), // Standardized string format for array structures
+        timestamp: new Date().toISOString(),
         imageUrl: uploadedReplyUrl || undefined
       };
 
@@ -175,7 +173,6 @@ export default function GlobalChatRoom() {
         </div>
       </header>
 
-      {/* TIMELINE FEED PANELS CONTAINER */}
       <div className="flex-1 overflow-y-auto p-4 max-w-3xl w-full mx-auto space-y-4">
         {loading ? (
           <div className="text-center py-24 font-mono text-xs text-slate-500 uppercase tracking-widest animate-pulse">Establishing Signal Feeds...</div>
@@ -189,7 +186,6 @@ export default function GlobalChatRoom() {
             return (
               <div key={msg.id} className="bg-slate-900/40 border border-slate-900/80 rounded-2xl p-4 space-y-3 shadow-md">
                 
-                {/* ACCOUNT PROFILE IDENTIFIER LABEL SECTION */}
                 <header className="flex justify-between items-center border-b border-slate-950/40 pb-1.5 font-mono text-[11px]">
                   <span className="text-blue-400 font-black tracking-wide">✍️ {msg.username}</span>
                   <span className="text-slate-400 font-medium">{logDate.toLocaleString()}</span>
@@ -199,11 +195,10 @@ export default function GlobalChatRoom() {
 
                 {msg.imageUrl && (
                   <div className="relative mt-2 max-w-md border border-slate-950 rounded-xl overflow-hidden">
-                    <img src={msg.imageUrl} alt="Attached Asset View" className="w-full h-auto object-cover max-h-80" />
+                    <img src={msg.imageUrl} alt="Attached Asset" className="w-full h-auto object-cover max-h-80" />
                   </div>
                 )}
 
-                {/* BOTTOM METRIC HUB TOOLBAR BAR CONTAINER */}
                 <footer className="flex items-center space-x-4 pt-1 font-mono text-[10px]">
                   <button 
                     onClick={() => handleToggleLikeMessage(msg.id, msg.likes)}
@@ -232,7 +227,6 @@ export default function GlobalChatRoom() {
                   </button>
                 </footer>
 
-                {/* NESTED RESPONSE THREAD SUBGRID ROWS */}
                 {msg.replies && msg.replies.length > 0 && (
                   <div className="pl-6 pt-2 border-l-2 border-slate-900 space-y-2.5">
                     {msg.replies.map((reply) => (
@@ -246,7 +240,7 @@ export default function GlobalChatRoom() {
                         <p className="text-slate-200 font-medium text-[12px] break-words">{reply.messageText}</p>
                         {reply.imageUrl && (
                           <div className="relative mt-1 max-w-sm border border-slate-950 rounded-lg overflow-hidden">
-                            <img src={reply.imageUrl} alt="Nested Asset View" className="w-full h-auto object-cover max-h-48" />
+                            <img src={reply.imageUrl} alt="Nested Attachment" className="w-full h-auto object-cover max-h-48" />
                           </div>
                         )}
                       </div>
@@ -254,9 +248,8 @@ export default function GlobalChatRoom() {
                   </div>
                 )}
 
-                {/* DYNAMIC REPLY INLINE CONTAINER FOR SUBMISSION */}
                 {activeReplyBoxId === msg.id && (
-                  <form onSubmit={(e) => handlePostThreadReply(e, msg.id)} className="pl-6 border-l-2 border-blue-500/30 pt-1 space-y-2 animate-fadeIn font-mono text-[11px]">
+                  <form onSubmit={(e) => handlePostThreadReply(e, msg.id)} className="pl-6 border-l-2 border-blue-500/30 pt-1 space-y-2 font-mono text-[11px]">
                     <div className="flex gap-2">
                       <input 
                         type="text" 
@@ -280,7 +273,6 @@ export default function GlobalChatRoom() {
         )}
       </div>
 
-      {/* PRIMARY MESSAGE BROADCAST COMPONENT FOOTER GRID BAR */}
       <footer className="p-4 border-t border-slate-900 bg-slate-950 shrink-0 z-40">
         <div className="max-w-3xl w-full mx-auto font-mono">
           {currentUser && userProfile ? (
