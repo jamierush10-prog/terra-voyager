@@ -22,7 +22,7 @@ export default function Home() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // ENTRANCE HUB & ROBUST HYDRATION TIMING STATES
+  // ENTRANCE HUB & HYDRATION STATES
   const [isEntranceModalOpen, setIsEntranceModalOpen] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   
@@ -48,7 +48,6 @@ export default function Home() {
   const [launchError, setLaunchError] = useState('');
   const [isLaunchGpsActive, setIsLaunchGpsActive] = useState(false);
 
-  // SECURE CLIENT CONTAINER HYDRATION MOUNT
   useEffect(() => {
     setHasHydrated(true);
     setIsEntranceModalOpen(true);
@@ -362,7 +361,7 @@ export default function Home() {
         </section>
       </main>
 
-      {/* FIXED AND STABILIZED CLIENT-SIDE SPLASH GATE ENTRY MODAL */}
+      {/* STABILIZED SPLASH GATE ENTRANCE HUB MODAL WITH RE-STYLED BLUE ACTIONS */}
       {hasHydrated && isEntranceModalOpen && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-50 flex items-center justify-center p-4 font-mono">
           <div className="w-full max-w-sm bg-slate-900 border border-slate-800/80 rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl text-center">
@@ -374,28 +373,31 @@ export default function Home() {
 
             {!isCheckinLookupOpen ? (
               <div className="flex flex-col space-y-3">
+                {/* BUTTON 1: RE-STYLED TO SOLID HIGH-CONTRAST BLUE */}
                 <button 
                   type="button" 
                   onClick={() => setIsEntranceModalOpen(false)}
-                  className="w-full bg-slate-950 border border-slate-800 hover:bg-slate-900 text-slate-100 font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
                 >
                   Explore Project Overview
                 </button>
 
+                {/* BUTTON 2: LOG CUSTODY CHECK-IN */}
                 <button 
                   type="button" 
                   onClick={() => { setLookupError(''); setIsCheckinLookupOpen(true); }}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
                 >
                   Log Active Volume Check-In
                 </button>
 
+                {/* BUTTON 3: RE-STYLED FROM LINK TEXT TO MATCHING SOLID BLUE ELEMENT BUTTON */}
                 <button 
                   type="button" 
                   onClick={() => { setIsEntranceModalOpen(false); setIsSignUpMode(true); setAuthActionError(''); setIsAuthModalOpen(true); }}
-                  className="w-full bg-transparent text-blue-400 hover:underline font-bold text-[10px] uppercase tracking-wider pt-2 cursor-pointer border-0"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold uppercase tracking-wider py-4 px-4 rounded-xl transition-all text-xs cursor-pointer text-center shadow-md border-0"
                 >
-                  [Enlist New Custodian Profile]
+                  Create a New Account
                 </button>
               </div>
             ) : (
